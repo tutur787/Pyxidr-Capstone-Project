@@ -3,6 +3,11 @@
 
 ---
 
+## 0.0 Potential Shortcut if you don't want to read or we do not want to optimize this -->which could be the case for a first pass
+
+*C3 can also be calculated as 0.75%.*
+
+
 ## 1. C3 Objectives and Cash Flow Testing Method
 
 ### 1.1 C3 RBC Purpose
