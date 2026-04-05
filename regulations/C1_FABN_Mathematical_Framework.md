@@ -1,4 +1,4 @@
-# C1 Risk-Based Capital Calculation for Fixed Income Securities
+# C1 Risk-Based Capital Calculation for FABN
 
 ## Mathematical Framework - Credit Risk Methodology (NAIC Life RBC)
 
@@ -179,7 +179,7 @@ Where:
 
 ---
 
-## 8. Summary: C1 Algorithm for Bonds (NAIC Methodology)
+## 8. Summary: C1 Algorithm for FABN (NAIC Methodology)
 
 ````
 INPUT: Bond portfolio, NRSRO ratings, BACV per issuer
