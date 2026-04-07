@@ -7,6 +7,9 @@ Outputs : bond_universe.csv        — one row per bond, all static features + t
           daily_spread.csv         — daily bid-ask spread matrix (dates x CUSIPs)
           volatility_triggers.csv  — dates where cross-sectional vol exceeds threshold
           data_quality.txt         — audit log of every cleaning decision
+          bid.csv                  — daily bid prices matrix (dates x CUSIPs)
+          ask.csv                  — daily ask prices matrix (dates x CUSIPs)
+          price.csv                — daily mid prices matrix (dates x CUSIPs)
 """
 
 import pandas as pd
