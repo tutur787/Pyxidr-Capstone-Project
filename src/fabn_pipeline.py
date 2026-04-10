@@ -4,8 +4,7 @@ FABN Portfolio Optimization — Data Pipeline
 Inputs  : Bloomberg_first_batch.xlsx
 Outputs : bond_universe.csv        — one row per bond, all static features + time-avg TC
           price_returns.csv        — daily log-returns matrix (dates x CUSIPs)
-          daily_spread.csv         — daily bid-ask spread matrix (dates x CUSIPs)
-          volatility_triggers.csv  — dates where cross-sectional vol exceeds threshold
+          daily_spread.csv         — daily credit spread matrix (dates x CUSIPs)
           data_quality.txt         — audit log of every cleaning decision
           bid.csv                  — daily bid prices matrix (dates x CUSIPs)
           ask.csv                  — daily ask prices matrix (dates x CUSIPs)
@@ -192,10 +191,9 @@ note(f"BID NaNs after ffill: {bid_clean.isna().sum().sum()}")
 note(f"ASK NaNs after ffill: {ask_clean.isna().sum().sum()}")
 
 # ─────────────────────────────────────────────
-# STEP 6: Daily bid-ask spread matrix
-#         This is the dynamic transaction cost input for the optimizer
+# STEP 6: Credit spread, log returns, and transaction costs
 # ─────────────────────────────────────────────
-note("\n=== STEP 6: Daily bid-ask spread ===")
+note("\n=== STEP 6: Credit spread, log returns, and transaction costs ===")
 
 # Align indices — all three series should share the same dates
 common_dates = price_clean.index.intersection(bid_clean.index).intersection(ask_clean.index)
@@ -206,45 +204,110 @@ price_final = price_clean.loc[common_dates, common_cols]
 bid_final   = bid_clean.loc[common_dates, common_cols]
 ask_final   = ask_clean.loc[common_dates, common_cols]
 
-# Daily spread: ask - bid (in price points per $100 face)
-daily_spread = ask_final - bid_final
+# --- Daily YTM approximation ---
+# YTM ≈ [Cpn + (100 - Price) / n] / [(100 + Price) / 2]
+# Cpn in % (e.g. 4.0 = 4%), Price per 100 face, n in years → result in decimal
+bonds_dedup = bonds.drop_duplicates(subset='CUSIP').set_index('CUSIP')
+cusip_cpn = bonds_dedup['Cpn'].reindex(common_cols)
+cusip_mat = bonds_dedup['Maturity'].reindex(common_cols)
 
-# As a percentage of mid price — this is the round-trip TC rate
-mid = (ask_final + bid_final) / 2
-daily_tc_pct = daily_spread / mid
+ytm_years = pd.DataFrame(
+    {c: (cusip_mat[c] - price_final.index).days / 365.25 for c in common_cols},
+    index=price_final.index
+)
+ytm_years = ytm_years.clip(lower=0.01)
 
-note(f"Daily spread matrix: {daily_spread.shape}")
-note(f"Mean bid-ask spread (price pts): {daily_spread.mean().mean():.4f}")
-note(f"Spread on high-vol days vs normal days:")
+cpn_vals = cusip_cpn.values
+ytm_approx = (cpn_vals + (100 - price_final) / ytm_years) / ((100 + price_final) / 2)
 
-# ─────────────────────────────────────────────
-# STEP 7: Log returns and volatility trigger
-# ─────────────────────────────────────────────
-note("\n=== STEP 7: Returns and volatility trigger ===")
+note(f"YTM matrix: {ytm_approx.shape}")
+note(f"Mean YTM: {ytm_approx.mean().mean():.4f}")
 
+# --- Credit spread = YTM - interpolated Treasury yield ---
+# Daily US Treasury constant-maturity yields from FRED (2024-03-01 to 2026-02-26).
+# Series: DGS6MO, DGS1, DGS2, DGS3, DGS5, DGS7, DGS10, DGS20, DGS30
+# Source: Federal Reserve Bank of St. Louis, https://fred.stlouisfed.org
+# Units: percent per annum → divided by 100 to get decimal
+# If FRED is unavailable, falls back to the static March 2024 snapshot below.
+TREASURY_TENORS = np.array([0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 20.0, 30.0])
+FRED_SERIES     = ['DGS6MO', 'DGS1', 'DGS2', 'DGS3', 'DGS5', 'DGS7', 'DGS10', 'DGS20', 'DGS30']
+STATIC_FALLBACK = np.array([0.0532, 0.0502, 0.0462, 0.0440, 0.0421, 0.0424, 0.0419, 0.0446, 0.0435])
+
+def fetch_fred_series(series_id, start, end):
+    """Fetch a single FRED series as a dated Series via the public CSV endpoint."""
+    import requests, io
+    url = (f"https://fred.stlouisfed.org/graph/fredgraph.csv"
+           f"?id={series_id}&vintage_date={end.strftime('%Y-%m-%d')}")
+    r = requests.get(url, timeout=10)
+    r.raise_for_status()
+    df = pd.read_csv(io.StringIO(r.text), encoding_errors='replace')
+    # Normalise column names: strip BOM, whitespace, uppercase
+    df.columns = [c.encode('ascii', 'ignore').decode().strip().upper() for c in df.columns]
+    # Date column may be 'DATE' or 'OBSERVATION_DATE' depending on FRED endpoint
+    date_col = next(c for c in df.columns if 'DATE' in c)
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df.set_index(date_col)
+    df.columns = [series_id]
+    df = df[(df.index >= start) & (df.index <= end)]
+    df = df.replace('.', np.nan).astype(float) / 100   # FRED uses '.' for missing
+    return df[series_id]
+
+try:
+    start = price_final.index[0] - pd.Timedelta(days=7)
+    end   = price_final.index[-1]
+    tsy_frames = [fetch_fred_series(s, start, end) for s in FRED_SERIES]
+    tsy_raw = pd.concat(tsy_frames, axis=1)
+    tsy_raw.columns = TREASURY_TENORS
+    tsy_raw = tsy_raw.ffill().bfill()                  # fill weekends/holidays
+    tsy_daily = tsy_raw.reindex(price_final.index, method='ffill')
+    note(f"Treasury curve: loaded daily FRED data ({tsy_daily.shape[0]} dates)")
+
+    # For each bond×date, interpolate the risk-free rate at that bond's remaining maturity
+    treasury_rf_vals = np.zeros_like(ytm_years.values)
+    for i, date in enumerate(ytm_years.index):
+        row_tenors = ytm_years.iloc[i].values           # remaining maturities per bond
+        row_yields = tsy_daily.loc[date].values          # that day's treasury curve
+        treasury_rf_vals[i] = np.interp(row_tenors, TREASURY_TENORS, row_yields)
+
+    treasury_rf = pd.DataFrame(treasury_rf_vals,
+                               index=ytm_years.index,
+                               columns=ytm_years.columns)
+    note("Treasury curve: interpolated per bond per date using daily FRED curve")
+
+except Exception as e:
+    note(f"Treasury curve: FRED fetch failed ({e})")
+    note("Treasury curve: using static March 2024 fallback — update when FRED available")
+    treasury_rf = pd.DataFrame(
+        np.interp(ytm_years.values, TREASURY_TENORS, STATIC_FALLBACK),
+        index=ytm_years.index, columns=ytm_years.columns
+    )
+
+daily_spread = ytm_approx - treasury_rf
+
+note(f"Credit spread matrix: {daily_spread.shape}")
+note(f"Mean credit spread: {daily_spread.mean().mean():.4f}")
+note(f"Credit spread range: {daily_spread.min().min():.4f} to {daily_spread.max().max():.4f}")
+
+# --- Log returns ---
 log_returns = np.log(price_final / price_final.shift(1)).iloc[1:]
 note(f"Log returns: {log_returns.shape[0]} days x {log_returns.shape[1]} bonds")
 note(f"Date range: {log_returns.index[0].date()} to {log_returns.index[-1].date()}")
 
-# Rolling 20-day cross-sectional volatility (annualised)
-rolling_vol   = log_returns.rolling(window=20).std() * np.sqrt(252)
-mean_vol      = rolling_vol.mean(axis=1)
-vol_threshold = mean_vol.mean() + 1.5 * mean_vol.std()
-trigger_dates = mean_vol[mean_vol > vol_threshold].index
-note(f"Vol trigger threshold: {vol_threshold:.4f}")
-note(f"Trigger dates identified: {len(trigger_dates)}")
-
-# Compare spread on trigger vs non-trigger dates
-trigger_spread = daily_spread.loc[daily_spread.index.isin(trigger_dates)].mean().mean()
-normal_spread  = daily_spread.loc[~daily_spread.index.isin(trigger_dates)].mean().mean()
-note(f"  Mean spread on trigger dates:     {trigger_spread:.4f} price pts")
-note(f"  Mean spread on non-trigger dates: {normal_spread:.4f} price pts")
-note(f"  Spread widens by: {((trigger_spread/normal_spread)-1)*100:.1f}% during high-vol events")
+# --- Bid-ask transaction cost (kept separate from credit spread) ---
+# IMPORTANT: these two quantities serve different roles in the optimizer:
+#   daily_spread  → credit spread (OAS proxy) — goes in the OBJECTIVE as the
+#                   quantity to maximize: maximize Σ wᵢ · credit_spreadᵢ
+#   daily_tc_pct  → bid-ask spread as % of mid — goes in the TC PENALTY term:
+#                   subtract λ · Σ (bid_ask_i/2) · |wᵢ - w⁰ᵢ|
+# Never substitute one for the other in the optimizer.
+mid = (ask_final + bid_final) / 2
+daily_tc_pct = (ask_final - bid_final) / mid
+note(f"Mean bid-ask TC: {daily_tc_pct.mean().mean():.4f}")
 
 # ─────────────────────────────────────────────
-# STEP 8: Align metadata universe with final CUSIP set
+# STEP 7: Align metadata universe with final CUSIP set
 # ─────────────────────────────────────────────
-note("\n=== STEP 8: Final universe alignment ===")
+note("\n=== STEP 7: Final universe alignment ===")
 
 bonds['Bid Price snapshot'] = bonds['Bid Price']
 bonds['Ask Price snapshot'] = bonds['Ask Price']
@@ -256,6 +319,13 @@ bonds = bonds.merge(avg_tc.reset_index().rename(columns={'index':'CUSIP'}),
 
 # Also keep snapshot bid-ask spread for reference
 bonds['bid_ask_spread_snapshot'] = bonds['Ask Price'] - bonds['Bid Price']
+
+# Deduplicate metadata — keep first occurrence of each CUSIP.
+# Duplicates exist for some bonds (e.g. Westpac NZ listed under two CUSIPs
+# that appear identical — same issuer, coupon, maturity). Keeping both would
+# cause a shape mismatch when aligning with the returns/spread matrices.
+bonds = bonds.drop_duplicates(subset='CUSIP', keep='first')
+note(f"Metadata after dedup: {len(bonds)} bonds")
 
 # Intersection of metadata CUSIPs and price CUSIPs — the fully aligned universe
 aligned_cusips = [c for c in common_cols if c in set(bonds['CUSIP'])]
@@ -272,9 +342,9 @@ note(f"Returns matrix:       {returns_final.shape}")
 note(f"Spread matrix:        {spread_final.shape}")
 
 # ─────────────────────────────────────────────
-# STEP 9: Summary stats
+# STEP 8: Summary stats
 # ─────────────────────────────────────────────
-note("\n=== STEP 9: Summary ===")
+note("\n=== STEP 8: Summary ===")
 note(f"Duration range: {bonds_final['duration'].min():.2f} to {bonds_final['duration'].max():.2f} yrs")
 note(f"Yield range: {bonds_final['current_yield'].min():.4f} to {bonds_final['current_yield'].max():.4f}")
 note(f"C1 factor range: {bonds_final['c1_factor'].min():.4f} to {bonds_final['c1_factor'].max():.4f}")
@@ -315,13 +385,6 @@ price_final_with_date.insert(0, 'date', price_final_with_date.index)
 bid_final_with_date.to_csv(os.path.join('..', 'data', 'bid.csv'), index=False)
 ask_final_with_date.to_csv(os.path.join('..', 'data', 'ask.csv'), index=False)
 price_final_with_date.to_csv(os.path.join('..', 'data', 'price.csv'), index=False)
-
-trigger_df = pd.DataFrame({
-    'date': trigger_dates,
-    'cross_sectional_vol': mean_vol[trigger_dates].values,
-    'mean_spread_that_day': daily_spread.loc[daily_spread.index.isin(trigger_dates)].mean(axis=1).values
-})
-trigger_df.to_csv(os.path.join('..', 'data', 'volatility_triggers.csv'), index=False)
 
 with open(os.path.join('..', 'data', 'data_quality.txt'), 'w') as f:
     f.write('\n'.join(log))

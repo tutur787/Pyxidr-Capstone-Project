@@ -1,4 +1,4 @@
-Pipeline run: 2026-04-06T20:46:07.127210
+Pipeline run: 2026-04-10T17:25:48.789686
 
 === STEP 1: Load metadata ===
 Sheet1: 237 bonds
@@ -28,27 +28,26 @@ ASK < BID violations after fix: 0
 BID NaNs after ffill: 0
 ASK NaNs after ffill: 2
 
-=== STEP 6: Daily bid-ask spread ===
-Daily spread matrix: (499, 148)
-Mean bid-ask spread (price pts): 0.1371
-Spread on high-vol days vs normal days:
-
-=== STEP 7: Returns and volatility trigger ===
+=== STEP 6: Credit spread, log returns, and transaction costs ===
+YTM matrix: (499, 148)
+Mean YTM: 0.0462
+Treasury curve: loaded daily FRED data (499 dates)
+Treasury curve: interpolated per bond per date using daily FRED curve
+Credit spread matrix: (499, 148)
+Mean credit spread: 0.0061
+Credit spread range: -0.0107 to 0.0337
 Log returns: 498 days x 148 bonds
 Date range: 2024-03-04 to 2026-02-26
-Vol trigger threshold: 0.0448
-Trigger dates identified: 31
-  Mean spread on trigger dates:     0.1626 price pts
-  Mean spread on non-trigger dates: 0.1354 price pts
-  Spread widens by: 20.1% during high-vol events
+Mean bid-ask TC: 0.0014
 
-=== STEP 8: Final universe alignment ===
+=== STEP 7: Final universe alignment ===
+Metadata after dedup: 237 bonds
 Dropped 44 bonds missing metadata from price/spread matrices
-Final bond universe:  108 bonds
+Final bond universe:  104 bonds
 Returns matrix:       (498, 104)
 Spread matrix:        (499, 104)
 
-=== STEP 9: Summary ===
+=== STEP 8: Summary ===
 Duration range: 0.10 to 5.77 yrs
 Yield range: 0.0106 to 0.0779
 C1 factor range: 0.0030 to 0.0130
@@ -56,7 +55,7 @@ C3 factor range: 0.0065 to 0.0400
 Rating distribution:
 BBG Composite
 A       23
-A+      23
+A+      19
 BBB     13
 BBB+    11
 AA-     11
@@ -66,7 +65,7 @@ AAA      6
 BBB-     5
 Sector distribution:
 BICS_LEVEL_1_SECTOR_NAME
-Financials                64
+Financials                60
 Consumer Discretionary    10
 Industrials                9
 Materials                  6
