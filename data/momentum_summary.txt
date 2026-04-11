@@ -1,0 +1,35 @@
+=======================================================
+MOMENTUM ANALYSIS SUMMARY
+=======================================================
+Lookback window:    21 trading days
+Forward window:     21 trading days
+Bond universe:      104 bonds
+
+── SPREAD MOMENTUM ────────────────────────────────────
+  Q1 avg fwd spread change: 2.20 bps
+  Q5 avg fwd spread change: 0.14 bps
+  Q5−Q1 edge:               -2.06 bps/month
+  Win rate:                 34.2%
+  Verdict: PRESENT
+
+── RETURN MOMENTUM ────────────────────────────────────
+  Q1 avg fwd return:        14.57 bps
+  Q5 avg fwd return:        30.22 bps
+  Q5−Q1 edge:               15.64 bps/month
+  Win rate:                 67.3%
+  Verdict: STRONG — monotonic quintile pattern
+
+── AUTOCORRELATION (spread changes) ───────────────────
+  Lag  1d: -0.4148
+  Lag  3d: +0.0230
+  Lag  5d: +0.0125
+  Lag  7d: +0.1755
+  Lag  9d: -0.0128
+  Lag 11d: +0.0758
+  Lag 13d: -0.0458
+  (positive = momentum, negative = mean reversion)
+
+── RECOMMENDATION ─────────────────────────────────────
+  Use return momentum as working signal.
+  Re-test spread momentum once dynamic FRED curve active.
+=======================================================
