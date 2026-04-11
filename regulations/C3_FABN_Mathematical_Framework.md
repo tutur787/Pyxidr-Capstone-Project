@@ -207,15 +207,3 @@ OUTPUT: C3 RBC charge in millions
 
 ---
 
-## Key Mathematical References
-
-| Element | Equation | Purpose |
-|---------|----------|---------|
-| Net Cash | $\text{NetCash}_t^s = C_t + P_t^{maturity} - R_t^{FABN} - E_t$ | Annual surplus/deficit |
-| Accumulated Cash | $\text{AccumCash}_t^s = \text{AccumCash}_{t-1}^s + \text{NetCash}_t^s$ | Cumulative position per year |
-| PVAD (Per Year) | $\text{PVAD}_{s,t} = \frac{\max(0, -\text{AccumCash}_t^s)}{\prod_{j=1}^{12t} (1 + r_j^s)}$ | PV of deficiency at year $t$ |
-| SGPV (Per Scenario) | $\text{SGPV}_s = \max_t(\text{PVAD}_{s,t})$ | Worst PV deficiency in scenario |
-| CTE Weighting | $C3_{\text{PreTax}} = 0.40 \cdot \text{SGPV}^{(4)} + \sum_{i \in \{1,2,3,5,6,7\}} 0.10 \cdot \text{SGPV}^{(i)}$ | Tail-risk capital (NAIC C3 Phase I) |
-| CIR Update | $r_{t+1/12}^s = r_t^s + \frac{\kappa}{12}(\theta - r_t^s) + \sigma\sqrt{r_t^s} \cdot 0.2887 \cdot Z_t^s$ | Monthly rate path |
-| Cumulative DF | $\text{DF}_t^s = \prod_{j=1}^{t}(1 + r_j^s)^{-1}$ | Path-dependent discount factor |
-
