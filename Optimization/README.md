@@ -8,7 +8,7 @@ project**, following the **NAIC Life Risk-Based Capital (RBC)** methodology.
 
 ## Document Summaries
 
-### 1. RBC_Equations.md
+### 1. RBC Equations.md
 
 Overview of the four NAIC Life RBC risk components with both theoretical
 (VaR-based) and practical representations:
