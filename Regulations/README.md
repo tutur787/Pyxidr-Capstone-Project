@@ -10,7 +10,7 @@ C1 is the **credit risk capital charge** — the capital buffer a life insurer m
 
 | Component | Risk |
 |-----------|------|
-| **C1** | Asset / credit risk ← this document |
+| **C1** | **Asset / credit risk ← this document** |
 | C2 | Insurance / underwriting risk |
 | C3 | Interest rate / ALM risk |
 | C4 | Business / operational risk |
