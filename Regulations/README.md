@@ -1,6 +1,6 @@
 # C1 Risk-Based Capital Framework for FABN
 
-This document provides the mathematical framework for calculating the **C1 Risk-Based Capital (RBC)** component applied to the bond portfolio backing **Fixed Annuities with Book Value (FABN)** liabilities, following the **NAIC Life RBC methodology**.
+This document provides the mathematical framework for calculating the **C1 Risk-Based Capital (RBC)** component applied to the bond portfolio backing **Funding Agreement-Backed Notes (FABN)** liabilities, following the **NAIC Life RBC methodology**.
 
 ---
 
