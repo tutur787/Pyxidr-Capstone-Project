@@ -9,8 +9,8 @@
 ### 1.1 C1 RBC Purpose
 
 The C1 component of Risk-Based Capital measures the potential loss from credit risk on fixed
-income assets. For bond portfolios, C1 quantifies the capital required to absorb losses arising
-from:
+income assets. In the FABN context, C1 quantifies the capital required on the bond portfolio
+held as backing assets for the funding agreement obligations, absorbing losses arising from:
 
 - Issuer default on principal and/or interest payments
 - Deferral risk: suspension of coupons without triggering a formal default
