@@ -45,31 +45,8 @@ Where:
 
 ---
 
-## Key Design Decisions
-
-**No maturity adjustment** — unlike Canada's LICAT, the NAIC C1 factor does not vary by bond maturity. Duration and interest rate risk are captured separately in the C3 component.
-
-**20 rating categories** — expanded from 6 to 20 in 2021 to better differentiate credit risk across the rating spectrum.
-
-**Portfolio Adjustment Factor** — penalizes concentrated portfolios (few issuers) and rewards diversified ones. A portfolio with 5 issuers gets a 5.87× multiplier vs. 0.82× for 500+ issuers.
-
-**Concentration charge** — the top-10 largest non-NAIC-1 exposures have their factor doubled, capped at 45% pre-tax.
-
----
-
 ## Relationship to C3
 
 This document covers the **asset side** of the FABN structure. The companion document `C3_FABN_Mathematical_Framework.md` covers the **liability side.**
 
 Together, C1 and C3 determine the dominant RBC requirements for a FABN optimization problem.
-
-## File Location
-
----
-
-## Primary Sources
-
-- Moody's Analytics (2021) — *Revisions to the RBC C1 Bond Factors*
-- American Academy of Actuaries, C1 Work Group (2015) — *Model Construction and Development of RBC Factors for Fixed Income Securities*
-- NAIC CIPR / Obersteadt (2017) — *RBC Requirements on Fixed Income Assets to Change*
-- NAIC (2025) — *Life and Fraternal RBC Newsletter, Volume 31*
