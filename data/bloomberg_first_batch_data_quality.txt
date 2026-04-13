@@ -1,0 +1,114 @@
+Pipeline: bloomberg_first_batch_cleaning
+Input: Bloomberg_first_batch.xlsx
+
+Sheets available: ['Bonds', 'Sheet1', 'Context', 'Bonds_V2', 'Fixed fields', 'PRICE', 'BID', 'ASK']
+
+--- Loading time-series sheets (with .N suffix dedup) ---
+  PRICE: dropped 4 pandas-auto-renamed duplicate columns: ['96122QAC7.1', '96122FAC1.1', '96122QAA1.1', '96122FAA5.1']
+  BID: dropped 4 pandas-auto-renamed duplicate columns: ['96122QAC7.1', '96122FAC1.1', '96122QAA1.1', '96122FAA5.1']
+  ASK: dropped 4 pandas-auto-renamed duplicate columns: ['96122QAC7.1', '96122FAC1.1', '96122QAA1.1', '96122FAA5.1']
+
+Raw shapes:
+  MID (PRICE): (503, 233)  range 2024-03-01 to 2026-03-02
+  BID:         (500, 233)  range 2024-03-01 to 2026-02-27
+  ASK:         (500, 233)  range 2024-03-01 to 2026-02-27
+
+Dropped 3 all-NaN trailing rows from MID (phantom Excel rows)
+Trimmed 1 partial tail row(s) with <23 bonds quoted (partial Bloomberg delivery)
+MID after trim: (499, 233)  range 2024-03-01 to 2026-02-26
+
+After date intersection across all three sheets:
+  MID: (499, 233)  BID: (499, 233)  ASK: (499, 233)
+
+CUSIPs in MID but missing in BID: 0
+CUSIPs in MID but missing in ASK: 0
+
+After CUSIP intersection: 233 bonds in all three sheets
+Bonds_V2 raw: 2701 rows, 2701 unique CUSIPs
+
+Date parse failures: issue_date=0  maturity=0
+
+Bonds_V2 ∩ PRICE CUSIPs: 233 bonds
+All PRICE CUSIPs have Bonds_V2 metadata ✓
+
+Sanity check — Bonds_V2.Date vs. first MID observation:
+Candidate duplicate groups (same issuer/ticker/cpn/maturity): 59
+Confirmed duplicate pairs (corr > 0.999): 54
+
+Dropped 54 duplicate CUSIPs from mid/bid/ask/metadata
+
+Universe after dedup: 179 bonds
+MID: 0 zero values, 0 negative values
+BID: 0 zero values, 0 negative values
+ASK: 8141 zero values, 7572 negative values
+
+--- Negative-price report (FLAG ONLY — no auto-correction) ---
+MID: no negatives ✓
+BID: no negatives ✓
+ASK: negatives in 26 CUSIPs
+  00828EEF2: 398 negative rows, first=2024-07-23 val=-93.0930
+  00828EEZ8: 52 negative rows, first=2025-12-12 val=-100.5380
+  045167AZ6: 398 negative rows, first=2024-07-23 val=-106.5830
+  045167DR1: 398 negative rows, first=2024-07-23 val=-94.6840
+  045167ER0: 398 negative rows, first=2024-07-23 val=-88.5110
+Bonds flagged for shift (issued after 2024-03-01): 25
+
+Applied shift to 25 bonds across mid/bid/ask
+
+--- Shift validation ---
+Shift validation: 25/25 passed
+ASK identity check (ASK ≈ 2·MID − BID):
+  Cells with all three present: 75145
+  Max absolute residual: 254.460000
+  Mean absolute residual: 4.128250
+  Cells with residual > 0.01: 1611
+Cells with MID < BID (corrupt mid): 838
+  Affected CUSIPs: 13
+  Top offenders:
+    00828EEZ8: 363 bad cells
+    45939E2B5: 153 bad cells
+    YV6176460: 145 bad cells
+    BW4937361: 36 bad cells
+    ZH5526616: 34 bad cells
+    BO1649512: 30 bad cells
+    298785KC9: 26 bad cells
+    YV2856123: 20 bad cells
+    045167AZ6: 15 bad cells
+    04522KAK2: 9 bad cells
+    00828EEZ8: imputed 363 MID values using median half-spread = 0.0265
+    45939E2B5: imputed 153 MID values using median half-spread = 0.3375
+    YV6176460: imputed 145 MID values using median half-spread = 0.2120
+    BW4937361: imputed 36 MID values using median half-spread = 0.0125
+    ZH5526616: imputed 34 MID values using median half-spread = 0.0065
+    BO1649512: imputed 30 MID values using median half-spread = 0.0090
+    298785KC9: imputed 26 MID values using median half-spread = 1.2890
+    YV2856123: imputed 20 MID values using median half-spread = 0.4565
+    045167AZ6: imputed 15 MID values using median half-spread = 0.4585
+    04522KAK2: imputed 9 MID values using median half-spread = 0.3285
+    500769KH6: imputed 4 MID values using median half-spread = 0.8185
+    15238RAK8: imputed 2 MID values using median half-spread = 0.4763
+    298785KB1: imputed 1 MID values using median half-spread = 0.7900
+
+Recomputed ASK = 2·MID − BID everywhere
+  ASK non-NaN cells: 75149
+  ASK negative cells: 0
+  ASK < BID cells after fix: 0
+Residual short-window bonds after shift fix: 49
+
+Dropped 49 residual short-window bonds
+Final universe: 130 bonds × 499 dates
+--- Safety scan on final mid/bid/ask ---
+MID: zeros=0  negatives=0  nans=2622/64870 (4.0%)
+BID: zeros=0  negatives=0  nans=2616/64870 (4.0%)
+ASK: zeros=0  negatives=0  nans=2622/64870 (4.0%)
+
+ASK < BID violations: 0
+Shape/column consistency ✓
+
+=== FINAL SUMMARY ===
+Final universe:    130 bonds × 499 dates
+Date range:        2024-03-01 to 2026-02-26
+Bonds shifted:     25 late-issue bonds repaired
+Duplicates dropped:54
+Residual dropped:  49 (saved in dropped_bonds_residual)
+Arthur comparison: Arthur kept 104 bonds; we keep 130
