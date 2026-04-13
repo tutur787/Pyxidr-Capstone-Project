@@ -1,0 +1,77 @@
+Pipeline run: 2026-04-13T18:30:15.825515
+
+=== STEP 1: Load metadata ===
+Sheet1: 237 bonds
+Fixed fields: 237 bonds
+After merge: 241 bonds, 59 missing Moody's rating
+
+=== STEP 2: Feature engineering ===
+Maturity parse failures: 0
+Current yield range: 0.0042 to 0.0779
+Duration missing after fallback: 0
+
+=== STEP 3: RBC factor mapping ===
+C1 factor: 0 unmapped ratings
+C3 factor missing: 0
+
+=== STEP 4: PRICE cleaning — determine kept CUSIPs ===
+Raw PRICE: 499 dates x 237 bonds
+Primary filter (last valid date != 2026-02-26): dropped 89 bonds, 148 remain
+Secondary filter (>20% missing): dropped 0 more bonds, 148 remain
+Final PRICE matrix: 499 dates x 148 bonds
+
+=== STEP 5: BID / ASK time series ===
+BID after CUSIP filter: (499, 148)
+ASK after CUSIP filter: (499, 148)
+ASK: corrected 996 negative values with abs()
+ASK < BID violations after fix: 0
+BID NaNs after ffill: 0
+ASK NaNs after ffill: 2
+
+=== STEP 6: Credit spread, log returns, and transaction costs ===
+YTM matrix: (499, 148)
+Mean YTM: 0.0462
+Treasury curve: FRED fetch failed (HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=10))
+Treasury curve: using static March 2024 fallback — update when FRED available
+Credit spread matrix: (499, 148)
+Mean credit spread: 0.0007
+Credit spread range: -0.0192 to 0.0265
+Log returns: 498 days x 148 bonds
+Date range: 2024-03-04 to 2026-02-26
+Mean bid-ask TC: 0.0014
+
+=== STEP 7: Final universe alignment ===
+Metadata after dedup: 237 bonds
+Dropped 44 bonds missing metadata from price/spread matrices
+Final bond universe:  104 bonds
+Returns matrix:       (498, 104)
+Spread matrix:        (499, 104)
+
+=== STEP 8: Summary ===
+Duration range: 0.10 to 5.77 yrs
+Yield range: 0.0106 to 0.0779
+C1 factor range: 0.0030 to 0.0130
+C3 factor range: 0.0065 to 0.0400
+Rating distribution:
+BBG Composite
+A       23
+A+      19
+BBB     13
+BBB+    11
+AA-     11
+A-      10
+AA+      6
+AAA      6
+BBB-     5
+Sector distribution:
+BICS_LEVEL_1_SECTOR_NAME
+Financials                60
+Consumer Discretionary    10
+Industrials                9
+Materials                  6
+Energy                     6
+Consumer Staples           4
+Utilities                  4
+Communications             3
+Technology                 1
+Health Care                1

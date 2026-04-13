@@ -1,0 +1,39 @@
+=========================================================
+MOMENTUM ANALYSIS SUMMARY
+=========================================================
+Lookback window (primary): 21 trading days
+Forward window (primary):  21 trading days
+Short window (7-day test): 7 trading days
+Bond universe:             104 bonds
+
+── SPREAD MOMENTUM (21-day) ───────────────────────────
+  Q1 avg fwd spread change: 8.35 bps
+  Q5 avg fwd spread change: 7.97 bps
+  Q5−Q1 edge:               -0.39 bps/month
+  Win rate:                 43.0%
+  Verdict: WEAK / INCONCLUSIVE — no reliable directional signal
+
+── SPREAD MOMENTUM (7-day) ────────────────────────────
+  Q1 avg fwd spread change: 2.74 bps
+  Q5 avg fwd spread change: 1.99 bps
+  Q5−Q1 edge:               -0.75 bps/month
+  Win rate:                 39.0%
+  Verdict: WEAK / INCONCLUSIVE — no reliable directional signal
+
+── RETURN MOMENTUM (21-day) ───────────────────────────
+  Q1 avg fwd return:        14.57 bps
+  Q5 avg fwd return:        30.22 bps
+  Q5−Q1 edge:               15.64 bps/month
+  Win rate:                 67.3%
+  Verdict: STRONG — clear monotonic quintile pattern
+
+── AUTOCORRELATION NOTE ───────────────────────────────
+  Lag-1 autocorr near -0.41 = bid-ask bounce, not signal.
+  Focus on lags 5+ for tradeable persistence.
+  Lag-7 autocorr: +0.1432
+
+── WORKING SIGNAL ─────────────────────────────────────
+  Return momentum (21-day) — strong, stable signal
+  Spread mean reversion at 21d: avoid using spread
+  tightening as a buy signal at monthly horizon.
+=========================================================
