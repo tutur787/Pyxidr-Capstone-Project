@@ -1,4 +1,4 @@
-Pipeline run: 2026-04-10T17:25:48.789686
+Pipeline run: 2026-04-13T18:30:15.825515
 
 === STEP 1: Load metadata ===
 Sheet1: 237 bonds
@@ -31,11 +31,11 @@ ASK NaNs after ffill: 2
 === STEP 6: Credit spread, log returns, and transaction costs ===
 YTM matrix: (499, 148)
 Mean YTM: 0.0462
-Treasury curve: loaded daily FRED data (499 dates)
-Treasury curve: interpolated per bond per date using daily FRED curve
+Treasury curve: FRED fetch failed (HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=10))
+Treasury curve: using static March 2024 fallback — update when FRED available
 Credit spread matrix: (499, 148)
-Mean credit spread: 0.0061
-Credit spread range: -0.0107 to 0.0337
+Mean credit spread: 0.0007
+Credit spread range: -0.0192 to 0.0265
 Log returns: 498 days x 148 bonds
 Date range: 2024-03-04 to 2026-02-26
 Mean bid-ask TC: 0.0014
