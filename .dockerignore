@@ -1,0 +1,35 @@
+.venv/
+.git/
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.ipynb_checkpoints/
+
+# Generated outputs (written at runtime, not needed in image)
+data/*.csv
+data/*.txt
+data/*.png
+r2_dist.png
+
+# Secrets — never bake into image
+gurobi.lic
+*.lic
+gcp-credentials.json
+*-credentials.json
+*.json
+.env
+.env.*
+
+# Raw data — too large; mount as volume at runtime
+arthur_data/
+data/
+
+# Large source files never needed in the image
+Optimization/
+Regulations/
+
+# Editor / OS artifacts
+.idea/
+.vscode/
+*.swp
