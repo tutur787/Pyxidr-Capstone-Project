@@ -1,0 +1,38 @@
+services:
+
+  optimization:
+    build: .
+    environment:
+      - GRB_WLSACCESSID=${GRB_WLSACCESSID:-}
+      - GRB_WLSSECRET=${GRB_WLSSECRET:-}
+      - GRB_LICENSEID=${GRB_LICENSEID:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCS_INPUT_BUCKET=${GCS_INPUT_BUCKET:-}
+      - GCS_OUTPUT_BUCKET=${GCS_OUTPUT_BUCKET:-}
+      - DATA_INPUT_DIR=/app/data/input
+      - DATA_OUTPUT_DIR=/app/data/output
+    volumes:
+      - ./arthur_data:/app/data/input:ro
+      - ./data/output:/app/data/output
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+
+  notebook:
+    build: .
+    profiles: ["notebook"]
+    command: >
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+        --NotebookApp.token=''
+    environment:
+      - GRB_WLSACCESSID=${GRB_WLSACCESSID:-}
+      - GRB_WLSSECRET=${GRB_WLSSECRET:-}
+      - GRB_LICENSEID=${GRB_LICENSEID:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCS_INPUT_BUCKET=${GCS_INPUT_BUCKET:-}
+      - GCS_OUTPUT_BUCKET=${GCS_OUTPUT_BUCKET:-}
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./arthur_data:/app/data/input:ro
+      - ./data/output:/app/data/output
+      - .:/app/workspace
+      - ~/.config/gcloud:/root/.config/gcloud:ro
