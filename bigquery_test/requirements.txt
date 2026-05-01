@@ -1,0 +1,5 @@
+google-cloud-bigquery>=3.20
+db-dtypes>=1.2
+pandas>=2.0
+matplotlib>=3.7
+pandas-gbq>=0.22
