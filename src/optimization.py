@@ -1,48 +1,49 @@
 """
 FABN Portfolio Optimization Pipeline
 =====================================
-Entry point for the containerized optimization pipeline. 
-
-SCAFFOLD FILE -- not complete
+Entry point for the containerized optimization pipeline.
 
 Environment variables
 ---------------------
-DATA_INPUT_DIR      : path to input data directory (local mode)
-DATA_OUTPUT_DIR     : path to output data directory (local mode)
-GCS_INPUT_BUCKET    : GCS bucket for input data (GCP mode)
-GCS_OUTPUT_BUCKET   : GCS bucket for output data (GCP mode)
-GCP_PROJECT_ID      : GCP project ID
-GRB_WLSACCESSID    : Gurobi WLS access ID
-GRB_WLSSECRET       : Gurobi WLS secret
-GRB_LICENSEID       : Gurobi WLS license ID
+DATA_INPUT_DIR       : path to input data directory (local mode)
+DATA_OUTPUT_DIR      : path to output data directory (local mode)
+GCP_PROJECT_ID       : GCP project for BigQuery
+BIGQUERY_DATASET     : BigQuery dataset name (default: Securities)
+FABN_OPTIMIZATION_DATE : optimization as-of date (YYYY-MM-DD)
+GCS_INPUT_BUCKET     : GCS bucket for input data (GCP mode)
+GCS_OUTPUT_BUCKET    : GCS bucket for output data (GCP mode)
+GRB_WLSACCESSID      : Gurobi WLS access ID
+GRB_WLSSECRET        : Gurobi WLS secret
+GRB_LICENSEID        : Gurobi WLS license ID
+LOG_LEVEL            : logging level (default INFO)
 """
 
+from __future__ import annotations
+
+import logging
 import os
+import sys
+
+from google.cloud import bigquery
+
+from fabn_optimizer import export_fabn_results, solve_fabn_nev
+from fabn_pipeline import FabnPipelineParams, build_pipeline
 
 
-def load_data():
-    """Load bond universe and market data from input source."""
-    pass
-
-
-def build_model():
-    """Construct the Gurobi optimization model with RBC constraints."""
-    pass
-
-
-def solve():
-    """Solve the portfolio optimization and return results."""
-    pass
-
-
-def write_results(results):
-    """Write optimization output to the configured destination."""
-    pass
+def main() -> int:
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO"),
+        format="%(levelname)s %(name)s %(message)s",
+        force=True,
+    )
+    params = FabnPipelineParams.from_env()
+    client = bigquery.Client(project=params.project_id)
+    pipeline = build_pipeline(client, params)
+    _, result = solve_fabn_nev(pipeline)
+    out_dir = os.environ.get("DATA_OUTPUT_DIR", "/app/data/output")
+    export_fabn_results(pipeline, result, output_dir=out_dir)
+    return 0
 
 
 if __name__ == "__main__":
-    data = load_data()
-    model = build_model()
-    results = solve()
-    print("Docker check complete")  # Placeholder log statement 
-    write_results(results)
+    sys.exit(main())
