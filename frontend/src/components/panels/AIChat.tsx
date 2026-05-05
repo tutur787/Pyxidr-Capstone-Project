@@ -1,0 +1,104 @@
+import { useState, useRef, useEffect } from 'react'
+import type { ChatMessage } from '../../types'
+
+const STUB_REPLY = "I'm the FABN Portfolio AI assistant. Full integration is coming soon — I'll be able to answer questions about your portfolio composition, optimization constraints, risk exposure, and suggested trades. Stay tuned!"
+
+const WELCOME: ChatMessage = {
+  role: 'assistant',
+  content: "Hello! I'm your FABN Portfolio AI. Ask me about your portfolio, risk metrics, or suggested trades. (Full AI integration coming soon.)",
+  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+}
+
+export default function AIChat() {
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  function handleSend() {
+    const text = input.trim()
+    if (!text || loading) return
+
+    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setMessages(prev => [...prev, { role: 'user', content: text, timestamp: ts }])
+    setInput('')
+    setLoading(true)
+
+    setTimeout(() => {
+      const replyTs = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      setMessages(prev => [...prev, { role: 'assistant', content: STUB_REPLY, timestamp: replyTs }])
+      setLoading(false)
+    }, 800)
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col h-full">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm">
+          ◈
+        </div>
+        <div>
+          <h2 className="text-white font-semibold text-sm">AI Portfolio Assistant</h2>
+          <p className="text-gray-500 text-xs">Ask questions about your portfolio</p>
+        </div>
+        <span className="ml-auto text-xs text-gray-600 border border-gray-700 px-2 py-0.5 rounded-full">
+          Stub mode
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 min-h-0">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed
+              ${msg.role === 'user'
+                ? 'bg-amber-500/15 border border-amber-500/20 text-amber-100'
+                : 'bg-gray-800 border border-gray-700 text-gray-300'
+              }`}>
+              <p>{msg.content}</p>
+              <p className="text-gray-600 text-[10px] mt-1 text-right">{msg.timestamp}</p>
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
+              <span className="text-gray-500 text-xs animate-pulse">Thinking…</span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Ask about your portfolio…"
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-200
+            placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || loading}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed
+            text-gray-900 font-semibold text-sm rounded-xl transition-colors flex-shrink-0"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  )
+}
