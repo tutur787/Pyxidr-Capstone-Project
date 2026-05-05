@@ -22,7 +22,6 @@ gcp-credentials.json
 .env.*
 
 # Raw data — too large; mount as volume at runtime
-arthur_data/
 data/
 
 # Large source files never needed in the image

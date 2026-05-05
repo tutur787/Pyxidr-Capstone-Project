@@ -46,6 +46,7 @@ make notebook          # open http://localhost:8888 in your browser
 
 ### How data flows
 
-- Input data is read from `./arthur_data/` (mounted read-only into the container)
-- Output results are written to `./data/` (mounted read-write, so results appear on your machine)
+- The optimization pipeline loads market data from **BigQuery** and **FRED** (see `src/fabn_pipeline.py`), not from a fixed local folder on disk.
+- Optional local inputs can be placed under **`./data/input`** (mounted read-only at `/app/data/input` when using JupyterLab).
+- Solver outputs are written to **`./data/output`** (mounted read-write for both `optimization` and `notebook` services).
 - GCP credentials are passed in from your local `~/.config/gcloud` — no service account key file needed
