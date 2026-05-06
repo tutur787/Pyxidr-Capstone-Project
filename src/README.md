@@ -1,5 +1,7 @@
 # FABN optimization (`src/`)
 
+hi, testing
+
 This folder holds the **production-style** Python entrypoint for the Funding Agreement-Backed Notes (FABN) portfolio workflow: pull market and liability inputs, build arrays for the solver, run a **Gurobi** linear program, and write results to disk.
 
 The notebooks under `Optimization/` are the original exploratory versions; behavior should stay aligned by changing code **here** first, then refreshing notebooks to import these modules if needed. 
