@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Header from './components/layout/Header'
 import TabBar from './components/layout/TabBar'
 import PortfolioKPI from './components/panels/PortfolioKPI'
-import RatesChart from './components/panels/RatesChart'
+import MarketsPanel from './components/panels/MarketsPanel'
 import NewsPanel from './components/panels/NewsPanel'
 import AIChat from './components/panels/AIChat'
 import PortfolioDeepDive from './components/modals/PortfolioDeepDive'
@@ -11,7 +11,7 @@ import StrategyTracking from './components/modals/StrategyTracking'
 import Risk from './components/modals/Risk'
 import DerivativeUsage from './components/modals/DerivativeUsage'
 import { useDate } from './hooks/useDate'
-import { stubKPIs, defaultHyperParams } from './data/stubs'
+import { defaultHyperParams } from './data/stubs'
 import type { TabId, HyperParams } from './types'
 
 export default function App() {
@@ -41,7 +41,7 @@ export default function App() {
       <main className="flex gap-3 p-3 overflow-hidden" style={{ height: 'calc(100vh - 100px)' }}>
         {/* Left: Portfolio KPI — full height */}
         <div className="flex flex-col" style={{ flex: '2' }}>
-          <PortfolioKPI kpis={stubKPIs} />
+          <PortfolioKPI date={date} />
         </div>
 
         {/* Right: two rows stacked */}
@@ -49,7 +49,7 @@ export default function App() {
           {/* Top row: Rates + News side by side */}
           <div className="flex gap-3 flex-1 min-h-0">
             <div className="flex-1 min-w-0">
-              <RatesChart date={date} />
+              <MarketsPanel date={date} />
             </div>
             <div className="flex-1 min-w-0">
               <NewsPanel date={date} />

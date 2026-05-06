@@ -45,14 +45,11 @@ export const stubNews: NewsItem[] = [
 ]
 
 export const defaultHyperParams: HyperParams = {
-  cvar_alpha: 0.75,
-  cvar_kappa: 300,
-  cvar_scenarios: 500,
-  momentum_lookback: 21,
-  momentum_forward: 21,
-  cir_kappa: 0.20,
-  cir_theta: 0.045,
-  cir_sigma: 0.015,
+  gamma_w:  1.0,
+  beta_w:   0.0,
+  alpha_w:  0.0,
+  lambda_w: 1.0,
+  eps_D:    0.5,
 }
 
 export const DATE_MIN = '2024-03-01'

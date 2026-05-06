@@ -24,6 +24,7 @@ export interface NewsItem {
   sentiment: 'positive' | 'negative' | 'neutral'
   score: number
   issuer: string
+  url?: string
 }
 
 export interface ChatMessage {
@@ -35,12 +36,9 @@ export interface ChatMessage {
 export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-tracking' | 'risk' | 'derivative-usage'
 
 export interface HyperParams {
-  cvar_alpha: number
-  cvar_kappa: number
-  cvar_scenarios: number
-  momentum_lookback: number
-  momentum_forward: number
-  cir_kappa: number
-  cir_theta: number
-  cir_sigma: number
+  gamma_w: number   // capital cost weight (C1 + C3)
+  beta_w: number    // momentum signal weight
+  alpha_w: number   // C3 duration cost weight inside capital cost
+  lambda_w: number  // cashflow shortfall penalty weight
+  eps_D: number     // duration gap tolerance (years)
 }

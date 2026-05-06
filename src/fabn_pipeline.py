@@ -46,6 +46,26 @@ class FabnPipelineParams:
     lambda_w: float = 1.0
     eps_D: float = 0.5
 
+    def update_user_params(
+        self,
+        gamma_w: float = None,
+        beta_w: float = None,
+        alpha_w: float = None,
+        lambda_w: float = None,
+        eps_D: float = None,
+    ):
+        """Allow user to update key pipeline parameters after instantiation."""
+        if gamma_w is not None:
+            self.gamma_w = gamma_w
+        if beta_w is not None:
+            self.beta_w = beta_w
+        if alpha_w is not None:
+            self.alpha_w = alpha_w
+        if lambda_w is not None:
+            self.lambda_w = lambda_w
+        if eps_D is not None:
+            self.eps_D = eps_D
+
     @classmethod
     def from_env(cls) -> FabnPipelineParams:
         date_str = os.environ.get("FABN_OPTIMIZATION_DATE", "2025-01-15")
