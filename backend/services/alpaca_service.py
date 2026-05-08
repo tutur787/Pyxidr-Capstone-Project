@@ -85,18 +85,18 @@ def fetch_news(date: str, limit: int = 25) -> list[dict]:
             result = client.get_news(request)
 
             articles = []
-            for sym, items in result.data.items():
-                for item in items:
-                    scored = _score(item.headline)
-                    articles.append({
-                        "date":      str(item.created_at)[:10],
-                        "headline":  item.headline,
-                        "source":    getattr(item, "source", "Alpaca"),
-                        "issuer":    sym,
-                        "url":       getattr(item, "url", ""),
-                        "sentiment": scored["sentiment"],
-                        "score":     scored["score"],
-                    })
+            for item in result.news:
+                scored = _score(item.headline)
+                issuer = item.symbols[0] if item.symbols else "General"
+                articles.append({
+                    "date":      str(item.created_at)[:10],
+                    "headline":  item.headline,
+                    "source":    item.source,
+                    "issuer":    issuer,
+                    "url":       item.url or "",
+                    "sentiment": scored["sentiment"],
+                    "score":     scored["score"],
+                })
 
             if articles:
                 logger.info(
