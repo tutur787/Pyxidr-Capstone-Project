@@ -130,3 +130,48 @@ def _stub_kpis() -> dict:
         "duration": 4.21, "cvar_pct": 2.87, "sharpe": 1.34,
         "n_bonds": 104, "ytd_return": 3.41, "spread_bps": 71, "rbc_c1_usage": 0.62,
     }
+
+
+# ── FABN list ─────────────────────────────────────────────────────────────────
+
+_STUB_FABNS = [
+    {"cusip": "FABN1", "coupon": None, "maturity": "", "rating": "", "sector": ""},
+    {"cusip": "FABN2", "coupon": None, "maturity": "", "rating": "", "sector": ""},
+    {"cusip": "FABN3", "coupon": None, "maturity": "", "rating": "", "sector": ""},
+]
+
+
+def get_fabn_list() -> list[dict]:
+    """
+    Return placeholder FABN entries for the selector.
+    Real FABN identifiers will replace these once wired to the optimizer output.
+    """
+    return _STUB_FABNS
+
+    try:  # noqa: unreachable — kept for when real FABN data is ready
+        df = _query(f"""
+            SELECT DISTINCT
+                CUSIP,
+                CAST(Cpn AS FLOAT64)          AS coupon,
+                CAST(Maturity AS STRING)       AS maturity,
+                `BBG Composite`               AS rating,
+                BICS_LEVEL_1_SECTOR_NAME      AS sector
+            FROM `{PROJECT_ID}.{DATASET}.Agg_Fixed_Field`
+            WHERE CUSIP IS NOT NULL
+            ORDER BY CUSIP
+        """)
+        if df.empty:
+            return _STUB_FABNS
+        return [
+            {
+                "cusip":    row["CUSIP"],
+                "coupon":   round(float(row["coupon"]), 4) if pd.notna(row["coupon"]) else None,
+                "maturity": str(row["maturity"])[:10] if pd.notna(row["maturity"]) else "",
+                "rating":   str(row["rating"]) if pd.notna(row["rating"]) else "",
+                "sector":   str(row["sector"]) if pd.notna(row["sector"]) else "",
+            }
+            for _, row in df.iterrows()
+        ]
+    except Exception as exc:
+        logger.error("BQ FABN list query failed: %s", exc)
+        return _STUB_FABNS

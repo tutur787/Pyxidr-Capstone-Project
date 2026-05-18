@@ -1,53 +1,45 @@
 import { useEffect, useState } from 'react'
 
-interface Quote {
+interface BondRate {
   symbol: string
   name: string
-  price: number
-  change: number
-  change_pct: number
+  yield_pct: number
+  change_bps: number
   direction: 'up' | 'down'
-  date?: string
 }
 
 interface Props {
   date: string
 }
 
-const STUBS: Quote[] = [
-  { symbol: 'SPY',  name: 'S&P 500 ETF',   price: 478.32, change:  2.14, change_pct:  0.45, direction: 'up'   },
-  { symbol: 'AAPL', name: 'Apple Inc.',     price: 182.63, change: -0.87, change_pct: -0.47, direction: 'down' },
-  { symbol: 'MSFT', name: 'Microsoft',      price: 374.51, change:  1.92, change_pct:  0.52, direction: 'up'   },
-  { symbol: 'NVDA', name: 'NVIDIA',         price: 621.44, change:  8.33, change_pct:  1.36, direction: 'up'   },
-  { symbol: 'JPM',  name: 'JPMorgan Chase', price: 196.87, change: -1.23, change_pct: -0.62, direction: 'down' },
+const STUBS: BondRate[] = [
+  { symbol: 'US3M',  name: 'US T-Bill 3M',  yield_pct: 5.25, change_bps:  2, direction: 'up'   },
+  { symbol: 'US1Y',  name: 'US Treasury 1Y', yield_pct: 5.10, change_bps: -1, direction: 'down' },
+  { symbol: 'US5Y',  name: 'US Treasury 5Y', yield_pct: 4.35, change_bps:  3, direction: 'up'   },
+  { symbol: 'GILTS', name: 'UK Gilts 10Y',   yield_pct: 4.20, change_bps: -2, direction: 'down' },
+  { symbol: 'CAD5Y', name: 'CAD Govt 5Y',    yield_pct: 3.75, change_bps:  1, direction: 'up'   },
 ]
 
-function TickerRow({ q, live }: { q: Quote; live: boolean }) {
-  const up  = q.direction === 'up'
-  const clr = up ? 'text-emerald-400' : 'text-red-400'
-  const bg  = up ? 'bg-emerald-500/8' : 'bg-red-500/8'
+function RateRow({ r }: { r: BondRate }) {
+  const up     = r.direction === 'up'
+  const clr    = up ? 'text-emerald-400' : 'text-red-400'
+  const bg     = up ? 'bg-emerald-500/8' : 'bg-red-500/8'
   const border = up ? 'border-emerald-500/15' : 'border-red-500/15'
 
   return (
     <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${border} ${bg} hover:brightness-110 transition-all`}>
-      {/* Left: symbol + name */}
       <div className="flex items-center gap-3 min-w-0">
-        <span className="text-white font-mono font-bold text-sm w-12 flex-shrink-0">{q.symbol}</span>
-        <span className="text-gray-500 text-xs truncate hidden sm:block">{q.name}</span>
+        <span className="text-white font-mono font-bold text-sm w-14 flex-shrink-0">{r.symbol}</span>
+        <span className="text-gray-500 text-xs truncate hidden sm:block">{r.name}</span>
       </div>
-
-      {/* Right: price + change */}
       <div className="flex items-center gap-4 flex-shrink-0">
         <span className="text-white font-mono font-semibold text-sm tabular-nums">
-          ${q.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {r.yield_pct.toFixed(2)}%
         </span>
-        <div className={`flex items-center gap-1 min-w-[90px] justify-end ${clr}`}>
+        <div className={`flex items-center gap-1 min-w-[80px] justify-end ${clr}`}>
           <span className="text-xs font-bold">{up ? '▲' : '▼'}</span>
           <span className="font-mono text-xs tabular-nums">
-            {up ? '+' : ''}{q.change.toFixed(2)}
-          </span>
-          <span className="font-mono text-xs tabular-nums opacity-80">
-            ({up ? '+' : ''}{q.change_pct.toFixed(2)}%)
+            {up ? '+' : ''}{r.change_bps} bps
           </span>
         </div>
       </div>
@@ -56,10 +48,9 @@ function TickerRow({ q, live }: { q: Quote; live: boolean }) {
 }
 
 export default function MarketsPanel({ date }: Props) {
-  const [quotes, setQuotes]   = useState<Quote[]>(STUBS)
+  const [rates, setRates]     = useState<BondRate[]>(STUBS)
   const [loading, setLoading] = useState(true)
   const [live, setLive]       = useState(false)
-  const [asOf, setAsOf]       = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -67,20 +58,18 @@ export default function MarketsPanel({ date }: Props) {
 
     fetch(`/api/markets?date=${date}`)
       .then(r => r.json())
-      .then((data: Quote[]) => {
+      .then((data: BondRate[]) => {
         if (cancelled) return
         if (data && data.length > 0) {
-          setQuotes(data)
+          setRates(data)
           setLive(true)
-          setAsOf(data[0]?.date ?? date)
         } else {
-          setQuotes(STUBS)
+          setRates(STUBS)
           setLive(false)
-          setAsOf(date)
         }
       })
       .catch(() => {
-        if (!cancelled) { setQuotes(STUBS); setLive(false); setAsOf(date) }
+        if (!cancelled) { setRates(STUBS); setLive(false) }
       })
       .finally(() => { if (!cancelled) setLoading(false) })
 
@@ -89,36 +78,33 @@ export default function MarketsPanel({ date }: Props) {
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-white font-semibold text-sm">Markets</h2>
-          <p className="text-gray-500 text-xs mt-0.5">{live ? `As of ${asOf}` : `Sim date ${date}`}</p>
+          <h2 className="text-white font-semibold text-sm">Rates</h2>
+          <p className="text-gray-500 text-xs mt-0.5">{live ? `As of ${date}` : `Sim date ${date}`}</p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full border ${live
           ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
           : 'text-gray-500 border-gray-700 bg-gray-800'}`}>
-          {live ? '● Alpaca' : '○ Stub'}
+          {live ? '● Live' : '○ Stub'}
         </span>
       </div>
 
-      {/* Column labels */}
       <div className="flex items-center justify-between px-3 mb-1.5">
-        <span className="text-gray-600 text-xs">Symbol</span>
+        <span className="text-gray-600 text-xs">Instrument</span>
         <div className="flex gap-4">
-          <span className="text-gray-600 text-xs">Price</span>
-          <span className="text-gray-600 text-xs min-w-[90px] text-right">Change</span>
+          <span className="text-gray-600 text-xs">Yield</span>
+          <span className="text-gray-600 text-xs min-w-[80px] text-right">Change</span>
         </div>
       </div>
 
-      {/* Tickers */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-gray-600 text-sm animate-pulse">Fetching quotes…</span>
+          <span className="text-gray-600 text-sm animate-pulse">Fetching rates…</span>
         </div>
       ) : (
         <div className="flex flex-col gap-1.5 flex-1">
-          {quotes.map(q => <TickerRow key={q.symbol} q={q} live={live} />)}
+          {rates.map(r => <RateRow key={r.symbol} r={r} />)}
         </div>
       )}
     </div>

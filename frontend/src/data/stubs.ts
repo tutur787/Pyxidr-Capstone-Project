@@ -1,4 +1,4 @@
-import type { PortfolioKPIs, RatePoint, NewsItem, HyperParams } from '../types'
+import type { PortfolioKPIs, RatePoint, NewsItem, HyperParams, Fabn } from '../types'
 
 export const stubKPIs: PortfolioKPIs = {
   value: 250_000_000,
@@ -46,11 +46,17 @@ export const stubNews: NewsItem[] = [
 
 export const defaultHyperParams: HyperParams = {
   gamma_w:  1.0,
-  beta_w:   0.0,
-  alpha_w:  0.0,
   lambda_w: 1.0,
   eps_D:    0.5,
+  w_max:    0.05,
+  n_min:    20,
 }
+
+export const STUB_FABNS: Fabn[] = [
+  { cusip: 'FABN1', coupon: null, maturity: '', rating: '', sector: '' },
+  { cusip: 'FABN2', coupon: null, maturity: '', rating: '', sector: '' },
+  { cusip: 'FABN3', coupon: null, maturity: '', rating: '', sector: '' },
+]
 
 export const DATE_MIN = '2024-03-01'
 export const DATE_MAX = '2026-02-26'

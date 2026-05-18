@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import os
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -257,3 +259,113 @@ def fetch_market_quotes(date: str) -> list[dict]:
     except Exception as exc:
         logger.error("Alpaca market quotes fetch failed: %s", exc)
         return []
+
+
+# ── Bond market rates (US Treasury XML + stubs for Gilts/CAD) ────────────────
+
+_BOND_STUB = [
+    {"symbol": "US3M",  "name": "US T-Bill 3M",    "yield_pct": 5.25, "change_bps":  2, "direction": "up"},
+    {"symbol": "US1Y",  "name": "US Treasury 1Y",   "yield_pct": 5.10, "change_bps": -1, "direction": "down"},
+    {"symbol": "US5Y",  "name": "US Treasury 5Y",   "yield_pct": 4.35, "change_bps":  3, "direction": "up"},
+    {"symbol": "GILTS", "name": "UK Gilts 10Y",     "yield_pct": 4.20, "change_bps": -2, "direction": "down"},
+    {"symbol": "CAD5Y", "name": "CAD Govt 5Y",      "yield_pct": 3.75, "change_bps":  1, "direction": "up"},
+]
+
+_TREASURY_XML = (
+    "https://home.treasury.gov/resource-center/data-chart-center"
+    "/interest-rates/pages/xml?data=daily_treasury_yield_curve"
+    "&field_tdr_date_value_month={ym}"
+)
+_NS = "http://schemas.microsoft.com/ado/2007/08/dataservices"
+
+
+def _parse_treasury_xml(date: str) -> dict[str, float]:
+    """Fetch US Treasury yield curve XML for the month containing `date`.
+    Returns { '3M': yield, '1Y': yield, '5Y': yield } in percent, or {} on failure.
+    """
+    dt = datetime.strptime(date, "%Y-%m-%d")
+    url = _TREASURY_XML.format(ym=dt.strftime("%Y%m"))
+    req = urllib.request.Request(url, headers={"User-Agent": "fabn-dashboard/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        tree = ET.parse(resp)
+
+    target_date = dt.strftime("%Y-%m-%dT00:00:00")
+    best_entry: dict[str, float] = {}
+    best_diff = 999
+
+    for entry in tree.iter():
+        # Each <m:properties> block holds one trading day
+        if not entry.tag.endswith("}properties"):
+            continue
+        date_el = entry.find(f"{{{_NS}}}NEW_DATE")
+        if date_el is None or not date_el.text:
+            continue
+        entry_date = date_el.text[:10]
+        diff = abs((datetime.strptime(entry_date, "%Y-%m-%d") - dt).days)
+        if diff < best_diff:
+            best_diff = diff
+            row: dict[str, float] = {}
+            for tag, key in [("BC_3MONTH", "3M"), ("BC_1YEAR", "1Y"), ("BC_5YEAR", "5Y")]:
+                el = entry.find(f"{{{_NS}}}{tag}")
+                if el is not None and el.text:
+                    row[key] = float(el.text)
+            best_entry = row
+
+    return best_entry
+
+
+def fetch_bond_rates(date: str) -> list[dict]:
+    """
+    Return reference rates for 5 fixed-income benchmarks at `date`.
+
+    US rates come from the US Treasury yield curve feed (free, no API key).
+    UK Gilts and CAD Govt use stub values (live integration pending).
+
+    Each element: { symbol, name, yield_pct, change_bps, direction }
+    Falls back to stubs on any error.
+    """
+    try:
+        yields = _parse_treasury_xml(date)
+        if not yields:
+            logger.warning("Treasury XML returned no data for date=%s", date)
+            return _BOND_STUB
+
+        # Try to get previous trading day to compute day change
+        prev_date = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=3)).strftime("%Y-%m-%d")
+        prev_yields = _parse_treasury_xml(prev_date)
+
+        def bps_change(sym_key: str, curr: float) -> tuple[int, str]:
+            if sym_key in prev_yields:
+                delta = round((curr - prev_yields[sym_key]) * 100)
+                return delta, "up" if delta >= 0 else "down"
+            return 0, "up"
+
+        results: list[dict] = []
+        mapping = [
+            ("US3M",  "US T-Bill 3M",   "3M"),
+            ("US1Y",  "US Treasury 1Y", "1Y"),
+            ("US5Y",  "US Treasury 5Y", "5Y"),
+        ]
+        for sym, name, key in mapping:
+            if key not in yields:
+                continue
+            curr_yield = round(yields[key], 3)
+            chg, direction = bps_change(key, yields[key])
+            results.append({
+                "symbol":     sym,
+                "name":       name,
+                "yield_pct":  curr_yield,
+                "change_bps": chg,
+                "direction":  direction,
+            })
+
+        # Gilts and CAD: stubs (no free unauthenticated API currently wired)
+        for stub in _BOND_STUB[3:]:
+            results.append(stub)
+
+        logger.info("Bond rates: %d instruments for date=%s", len(results), date)
+        return results
+
+    except Exception as exc:
+        logger.error("Bond rates fetch failed: %s", exc)
+        return _BOND_STUB

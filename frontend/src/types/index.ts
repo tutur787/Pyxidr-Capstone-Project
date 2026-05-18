@@ -36,9 +36,17 @@ export interface ChatMessage {
 export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-tracking' | 'risk' | 'derivative-usage'
 
 export interface HyperParams {
-  gamma_w: number   // capital cost weight (C1 + C3)
-  beta_w: number    // momentum signal weight
-  alpha_w: number   // C3 duration cost weight inside capital cost
-  lambda_w: number  // cashflow shortfall penalty weight
-  eps_D: number     // duration gap tolerance (years)
+  gamma_w:  number
+  lambda_w: number
+  eps_D:    number
+  w_max:    number
+  n_min:    number
+}
+
+export interface Fabn {
+  cusip:    string
+  coupon:   number | null
+  maturity: string
+  rating:   string
+  sector:   string
 }

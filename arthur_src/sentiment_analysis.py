@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
 from transformers import pipeline
-from alpaca.data.historical import NewsClient
+from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import NewsRequest
 import yfinance as yf
 
@@ -89,17 +89,16 @@ def fetch_alpaca_headlines(
             )
             news = client.get_news(request)
 
-            for sym, articles in news.data.items():
-                for article in articles:
-                    all_articles.append({
-                        "symbol":     sym,
-                        "headline":   article.headline,
-                        "url":        article.url,
-                        "created_at": article.created_at,
-                        "author":     getattr(article, "author", None),
-                        "source":     getattr(article, "source", None),
-                        "summary":    getattr(article, "summary", None),
-                    })
+            for article in news.news:
+                all_articles.append({
+                    "symbol":     article.symbols[0] if article.symbols else symbol,
+                    "headline":   article.headline,
+                    "url":        article.url,
+                    "created_at": article.created_at,
+                    "author":     getattr(article, "author", None),
+                    "source":     getattr(article, "source", None),
+                    "summary":    getattr(article, "summary", None),
+                })
 
         except Exception as e:
             print(f"  [Alpaca] Error fetching {symbol}: {e}")

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from './components/layout/Header'
 import TabBar from './components/layout/TabBar'
 import PortfolioKPI from './components/panels/PortfolioKPI'
@@ -11,13 +11,26 @@ import StrategyTracking from './components/modals/StrategyTracking'
 import Risk from './components/modals/Risk'
 import DerivativeUsage from './components/modals/DerivativeUsage'
 import { useDate } from './hooks/useDate'
-import { defaultHyperParams } from './data/stubs'
-import type { TabId, HyperParams } from './types'
+import { defaultHyperParams, STUB_FABNS } from './data/stubs'
+import type { TabId, HyperParams, Fabn } from './types'
 
 export default function App() {
   const { date, advanceDate, isAtMin, isAtMax, formatDisplay } = useDate()
   const [activeModal, setActiveModal] = useState<TabId | null>(null)
   const [hyperParams, setHyperParams] = useState<HyperParams>(defaultHyperParams)
+  const [fabns, setFabns] = useState<Fabn[]>(STUB_FABNS)
+  const [selectedFabns, setSelectedFabns] = useState<Fabn[]>([])
+
+  useEffect(() => {
+    fetch('/api/fabns')
+      .then(r => r.json())
+      .then((data: Fabn[]) => {
+        if (data && data.length > 0) {
+          setFabns(data)
+        }
+      })
+      .catch(() => {}) // keep stubs on failure
+  }, [])
 
   function closeModal() { setActiveModal(null) }
 
@@ -32,6 +45,9 @@ export default function App() {
           isAtMax={isAtMax}
           hyperParams={hyperParams}
           onHyperParamsChange={setHyperParams}
+          fabns={fabns}
+          selectedFabns={selectedFabns}
+          onFabnChange={setSelectedFabns}
         />
 
         <TabBar onTabClick={setActiveModal} />
@@ -46,7 +62,7 @@ export default function App() {
 
         {/* Right: two rows stacked */}
         <div className="flex flex-col gap-3" style={{ flex: '2' }}>
-          {/* Top row: Rates + News side by side */}
+          {/* Top row: Markets + News side by side */}
           <div className="flex gap-3 flex-1 min-h-0">
             <div className="flex-1 min-w-0">
               <MarketsPanel date={date} />

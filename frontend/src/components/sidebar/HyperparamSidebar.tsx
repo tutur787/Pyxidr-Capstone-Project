@@ -106,8 +106,8 @@ export default function HyperparamSidebar({ open, onClose, params, onChange }: P
 
           <ParamSlider
             symbol="γ"
-            label="Capital Cost Weight"
-            description="Scales the full RBC capital cost term (C1 credit risk + α·C3 duration cost). Higher = penalise regulatory capital usage more."
+            label="Cost of capital"
+            description="Scales the full RBC capital cost term (C1 credit risk). Higher = penalise regulatory capital usage more."
             value={params.gamma_w}
             min={0} max={5} step={0.05}
             format={v => v.toFixed(2)}
@@ -115,28 +115,8 @@ export default function HyperparamSidebar({ open, onClose, params, onChange }: P
           />
 
           <ParamSlider
-            symbol="β"
-            label="Momentum Signal Weight"
-            description="Adds β × momentum_score to each bond's spread in the objective. 0 = pure spread optimisation; positive values tilt toward recent price momentum."
-            value={params.beta_w}
-            min={0} max={2} step={0.05}
-            format={v => v.toFixed(2)}
-            onChange={v => set('beta_w', v)}
-          />
-
-          <ParamSlider
-            symbol="α"
-            label="C3 Duration Cost Weight"
-            description="Weight on the C3 interest-rate risk term inside the capital cost: C3 = α × (d⁺ + d⁻). 0 = duration gap is only a hard constraint (ε_D), not penalised in the objective."
-            value={params.alpha_w}
-            min={0} max={2} step={0.05}
-            format={v => v.toFixed(2)}
-            onChange={v => set('alpha_w', v)}
-          />
-
-          <ParamSlider
             symbol="λ"
-            label="CF Shortfall Penalty"
+            label="Lending facility cost"
             description="Penalty per dollar of quarterly cashflow shortfall relative to the FABN liability schedule. Higher = stricter asset–liability cashflow matching."
             value={params.lambda_w}
             min={0} max={10} step={0.1}
@@ -159,19 +139,26 @@ export default function HyperparamSidebar({ open, onClose, params, onChange }: P
             onChange={v => set('eps_D', v)}
           />
 
-          {/* Current values summary */}
-          <div className="mt-6 mb-4 p-3 bg-gray-900 rounded-xl border border-gray-800">
-            <p className="text-gray-500 text-xs font-medium mb-2 uppercase tracking-wider">Current call</p>
-            <pre className="text-gray-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-{`update_user_params(
-  gamma_w  = ${params.gamma_w.toFixed(2)},
-  beta_w   = ${params.beta_w.toFixed(2)},
-  alpha_w  = ${params.alpha_w.toFixed(2)},
-  lambda_w = ${params.lambda_w.toFixed(1)},
-  eps_D    = ${params.eps_D.toFixed(2)},
-)`}
-            </pre>
-          </div>
+          <ParamSlider
+            symbol="w_max"
+            label="Maximum single bond weight"
+            description="Upper bound on the fraction of the portfolio allocated to any single bond. Lower = more diversification required."
+            value={params.w_max}
+            min={0.01} max={0.20} step={0.01}
+            format={v => `${(v * 100).toFixed(0)}%`}
+            onChange={v => set('w_max', v)}
+          />
+
+          <ParamSlider
+            symbol="n_min"
+            label="Minimal bond count"
+            description="Minimum number of distinct bonds that must be held in the portfolio."
+            value={params.n_min}
+            min={5} max={100} step={1}
+            format={v => String(Math.round(v))}
+            onChange={v => set('n_min', Math.round(v))}
+          />
+
         </div>
 
         {/* Footer */}
