@@ -7,6 +7,8 @@ services:
       - GRB_WLSSECRET=${GRB_WLSSECRET:-}
       - GRB_LICENSEID=${GRB_LICENSEID:-}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_AGENT_MODEL=${HF_AGENT_MODEL:-}
       - GCS_INPUT_BUCKET=${GCS_INPUT_BUCKET:-}
       - GCS_OUTPUT_BUCKET=${GCS_OUTPUT_BUCKET:-}
       - DATA_INPUT_DIR=/app/data/input
