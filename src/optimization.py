@@ -21,13 +21,10 @@ LOG_LEVEL            : logging level (default INFO)
 from __future__ import annotations
 
 import logging
-import os
 import sys
 
-from google.cloud import bigquery
-
-from fabn_optimizer import export_fabn_results, solve_fabn_nev
-from fabn_pipeline import FabnPipelineParams, build_pipeline
+from fabn_job import run_fabn_job
+from fabn_pipeline import FabnPipelineParams
 
 
 def main() -> int:
@@ -37,11 +34,7 @@ def main() -> int:
         force=True,
     )
     params = FabnPipelineParams.from_env()
-    client = bigquery.Client(project=params.project_id)
-    pipeline = build_pipeline(client, params)
-    _, result = solve_fabn_nev(pipeline)
-    out_dir = os.environ.get("DATA_OUTPUT_DIR", "/app/data/output")
-    export_fabn_results(pipeline, result, output_dir=out_dir)
+    run_fabn_job(params)
     return 0
 
 
