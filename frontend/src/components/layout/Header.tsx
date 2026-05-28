@@ -13,12 +13,14 @@ interface Props {
   fabns: Fabn[]
   selectedFabns: Fabn[]
   onFabnChange: (fabns: Fabn[]) => void
+  onApply: () => void
 }
 
 export default function Header({
   date, formattedDate, onAdvance, isAtMin, isAtMax,
   hyperParams, onHyperParamsChange,
   fabns, selectedFabns, onFabnChange,
+  onApply,
 }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -215,6 +217,7 @@ export default function Header({
         onClose={() => setSidebarOpen(false)}
         params={hyperParams}
         onChange={onHyperParamsChange}
+        onApply={onApply}
       />
     </>
   )

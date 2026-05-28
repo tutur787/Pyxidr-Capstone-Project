@@ -50,3 +50,67 @@ export interface Fabn {
   rating:   string
   sector:   string
 }
+
+export interface BondAllocation {
+  cusip:      string
+  sector:     string
+  rating:     string
+  h_opt:      number
+  h_curr:     number
+  delta_usd:  number
+  weight:     number
+  spread_bps: number
+  duration:   number
+  score_bps:  number
+}
+
+export interface Trade {
+  cusip:            string
+  sector:           string
+  rating:           string
+  action:           'BUY' | 'SELL'
+  delta_weight_pct: number
+  delta_usd:        number
+  spread_bps:       number
+  duration:         number
+}
+
+export interface ConstraintResult {
+  label: string
+  value: number
+  bound: number
+  pass:  boolean
+}
+
+export interface CashflowRow {
+  period:        string
+  fabn_cf:       number
+  asset_cf:      number
+  surplus:       number
+  shortfall_net: number
+  facility_bal:  number
+}
+
+export interface OptimizerResult {
+  status:           'optimal' | 'infeasible' | 'error'
+  date:             string
+  n_bonds_universe: number
+  n_bonds_selected: number
+  spread_bps:       number
+  duration:         number
+  yield_pct:        number
+  rbc_c1_usage:     number
+  rbc_ratio:        number
+  nev:              number
+  spread_income:    number
+  capital_cost:     number
+  c1_cost:          number
+  c3_cost:          number
+  txn_cost:         number
+  duration_gap:     number
+  allocations:      BondAllocation[]
+  trades:           Trade[]
+  constraints:      ConstraintResult[]
+  cashflows:        CashflowRow[]
+  error?:           string
+}

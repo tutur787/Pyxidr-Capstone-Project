@@ -7,3 +7,6 @@ db-dtypes==1.3.0
 pandas==2.2.2
 numpy==1.26.4
 vaderSentiment==3.3.2
+scipy>=1.13.0
+pandas-datareader>=0.10.0
+gurobipy>=11.0.0

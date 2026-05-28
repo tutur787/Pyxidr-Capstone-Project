@@ -5,6 +5,7 @@ interface Props {
   onClose: () => void
   params: HyperParams
   onChange: (p: HyperParams) => void
+  onApply?: () => void
 }
 
 interface SliderProps {
@@ -64,7 +65,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
   )
 }
 
-export default function HyperparamSidebar({ open, onClose, params, onChange }: Props) {
+export default function HyperparamSidebar({ open, onClose, params, onChange, onApply }: Props) {
   function set<K extends keyof HyperParams>(key: K, value: number) {
     onChange({ ...params, [key]: value })
   }
@@ -164,7 +165,7 @@ export default function HyperparamSidebar({ open, onClose, params, onChange }: P
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-800">
           <button
-            onClick={onClose}
+            onClick={() => { onApply?.(); onClose() }}
             className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold text-sm rounded-xl transition-colors"
           >
             Apply & Close
