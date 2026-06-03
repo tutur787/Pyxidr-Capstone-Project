@@ -19,7 +19,8 @@ There are **two generations** of objective function in this folder:
 | File | Role |
 |---|---|
 | `FABN_Data_Pipeline.ipynb` | **Shared input builder.** Pulls BigQuery, produces the `pipeline` dict every optimizer consumes. Run via `%run` from each optimizer. |
-| `FABN_Optimizer_SAP.ipynb` | **Current optimizer.** SAP statutory objective (Phase 1, single-period). Built from the EB notebook. |
+| `FABN_Optimizer_SAP.ipynb` | **Current optimizer (Phase 1).** SAP statutory objective, single-period. Built from the EB notebook. |
+| `FABN_Optimizer_SAP_Backtest.ipynb` | **Phase 2.** Daily dynamic backtest: re-optimizes every trading day with a buy/sell decomposition (retained lots at locked book yield, new buys at market), netting trading cost, capital, lending revenue & borrowing cost; compares dynamic vs static. Self-contained. |
 | `FABN_Optimizer_Gurobi_Clean_V_EB.ipynb` | Prior best market-value optimizer: RBC priced into objective, two-sided lending facility, conservative bond exclusion. Base for the SAP notebook. |
 | `FABN_Optimizer_Gurobi_Clean_v2.ipynb` | Market-value optimizer with lending facility + PV-shortfall cap. ⚠️ Credits *discounted future bond CFs as "sale proceeds"* at FABN maturity — economically questionable; superseded. |
 | `FABN_Optimizer_Gurobi_Clean.ipynb` | v1 clean optimizer (soft CF-shortfall penalty). |
@@ -155,12 +156,50 @@ liability overstates coverage. Future cashflows are not cash-in-hand on the sale
 
 ---
 
-## Phase 2 (planned, not yet built): dynamic backtest
+## Phase 2 — daily dynamic backtest (`FABN_Optimizer_SAP_Backtest.ipynb`, implemented)
 
-Wrap the single-period solve in `solve_sap(optimization_date, h_prev)` and roll it across the
-498-day price panel (monthly/quarterly rebalance), feeding each solution as the next period's
-`h_curr` so turnover `Σ|h_{i,t} − h_{i,t−1}|` becomes real. Compare cumulative statutory earnings
-**dynamic vs static buy-and-hold** — the document's core thesis.
+A **daily** re-optimization backtest. Self-contained: loads universe, cashflows, C-1 table, the
+full daily price panels, and FRED history **once**, then **precomputes** per-(day, bond) arrays:
+market book yield `Y[d,i]` (effective-interest IRR vs that day's mid), modified duration `DUR`,
+bid-ask cost `TAU`, eligibility `ELIG`/`alive`. The IRR precompute (Section 1) is the slow step;
+`STEP>1` sub-samples days for a quick trial (`STEP=1` = every trading day, ~498).
+
+**Daily decision via buy/sell decomposition** (`solve_day`). Holding `h_i = h_prev_i + b_i − s_i`
+with buys `b_i≥0`, sells `0≤s_i≤h_prev_i`:
+$$\max_{b,s\ge0}\ T\!\sum_i\!\big[(h^{prev}_i-s_i)(y^{bk}_i-r^F)+b_i(y^{mkt}_i-r^F)\big]-T\lambda\!\sum_i\theta_i h_i-\sum_i\tau_i(b_i+s_i)+r_{save}\delta\!\sum_q B_q-r_{borrow}\delta\!\sum_q s^{net}_q$$
+- **Retained lots earn the locked book yield `y^bk`; new buys earn market `y^mkt`** — so the swap
+  trigger is the true *pickup minus the locked yield given up*, not market-vs-market. Linear in
+  `(b_i,s_i)`.
+- **All four economics enter the trade decision:** trading cost `τ_i(b_i+s_i)` (real bid-ask, both
+  sides), capital-cost change `Tλθ_i h_i`, **lending revenue** `r_save·δ·ΣB_q`, **borrowing cost**
+  `r_borrow·δ·Σs^net_q`.
+- **Horizon `T` = years remaining to FABN maturity.** Income/capital are valued over the life a
+  holding would actually earn over (you hold unless something better appears), so a one-time trade
+  cost is judged against horizon income — this is what makes worthwhile opportunities get taken
+  instead of churning (1-day income could never repay a spread) or freezing.
+- `λ = cost_of_capital × RBC_bar`. Constraints: budget, sell-cap `s_i≤h_prev_i`, duration band,
+  issuer cap, lending-facility recursion + PV-shortfall cap (quarterly grid to maturity).
+
+**Amortized-cost ledger.** After each solve, `y^bk_i = [(h_prev_i−s_i)y^bk_i + b_i y^mkt_i]/h_i`.
+Matured bonds redeem at par (no spread) and their cash is redeployed (dynamic) or held at `r^F`
+(static, net-zero spread → a static book *decays into cash* as bonds run off).
+
+**Realized daily P&L** (accrual, separate from the decision objective; `Δ_k` = day length in years;
+`e` = alive mask):
+$$\text{Net}_k=\Delta_k\sum_i e\,h_{k,i}(y^{bk}_{k,i}-r^F)-\Delta_k\lambda\sum_i e\,\theta_i h_{k,i}-\sum_i\tau_{k,i}(b_{k,i}+s_{k,i})$$
+Income accrues at the **locked** in-force yield; **facility interest is decision-shaping only**
+(full-horizon), so it is *not* re-accrued daily (would double count). Dynamic vs static =
+cumulative `Σ Net_k`; both start from cash on day 0 with the identical day-0 book (entry cost
+cancels).
+
+**Honest limitations (in the notebook):** IMR/AVR excluded → sale gains/losses not booked, so this
+is a *conservative* test (forward book-yield pickup net of costs + run-off reinvestment, not
+trading P&L). Prices treated as clean. The current-quarter facility bucket may include intra-quarter
+past coupons (minor ALM approximation). Outcome is data-driven — if costs exceed the pickup, static
+can win.
+
+**Outputs:** cumulative net (dynamic vs static), in-force weighted book yield over time, daily
+turnover + notional traded, and required capital over time.
 
 ---
 
