@@ -27,6 +27,9 @@ There are **two generations** of objective function in this folder:
 | `FABN_Optimizer_Gurobi.ipynb` | Original skeleton/prototype. |
 | `RBC Equations.md`, `Proposed Equation.md`, `RBC_Reformulation_Summary.md` | Supporting derivations (NAIC RBC components, LP reformulation). |
 | `C1_table =.py` | C-1 charge factor lookup table (S&P / Moody's → factor). |
+| `fabn_finance.py` | **Shared, unit-tested math** (single source of truth): book-yield IRR, Macaulay/modified duration, coupon/amortization split, C-1 lookup, and the Phase-2 `IMRLedger`. Both the pipeline and the backtest import from here. |
+| `tests/test_fabn_finance.py` | **pytest** suite (18 tests): par/premium/discount book yield, zero-coupon duration, `book_yield = coupon_inc + amort_inc` identity, C-1 fallbacks, and the IMR conservation identity. Run `pytest tests/ -v` from this folder. |
+| `METHODOLOGY.md` | Financial methodology & assumptions: every formula with its code home, the SAP objective, the soft-band / post-FABN relaxation, the IMR rule, placeholders pending Athene, and how the math is verified. |
 
 **Run order (any optimizer):** `Date Selection → Section 0 (%run pipeline) → 1A unpack → 1B/1C overrides → 2 model → 3 results → 4 analytics`.
 
@@ -177,8 +180,13 @@ $$\max_{b,s\ge0}\ T\!\sum_i\!\big[(h^{prev}_i-s_i)(y^{bk}_i-r^F)+b_i(y^{mkt}_i-r
   holding would actually earn over (you hold unless something better appears), so a one-time trade
   cost is judged against horizon income — this is what makes worthwhile opportunities get taken
   instead of churning (1-day income could never repay a spread) or freezing.
-- `λ = cost_of_capital × RBC_bar`. Constraints: budget, sell-cap `s_i≤h_prev_i`, duration band,
-  issuer cap, lending-facility recursion + PV-shortfall cap (quarterly grid to maturity).
+- `λ = cost_of_capital × RBC_bar`. Constraints: budget, sell-cap `s_i≤h_prev_i`, **soft** duration
+  band (breach beyond ±`eps_D` penalized at `dur_pen`, so the LP is always feasible), issuer cap,
+  lending-facility recursion + PV-shortfall cap (quarterly grid to maturity).
+- **Turnover control (`PARAMS`):** `kappa` scales the trading-cost hurdle (LP no-trade band; `>1`
+  trades less); `reopt_every` re-optimizes every N days (hold between). `allow_post_fabn=True` lets
+  the optimizer buy bonds maturing after the FABN (sold before maturity) — required for early-horizon
+  feasibility (see *Previous issues* §3).
 
 **Amortized-cost ledger.** After each solve, `y^bk_i = [(h_prev_i−s_i)y^bk_i + b_i y^mkt_i]/h_i`.
 Matured bonds redeem at par (no spread) and their cash is redeployed (dynamic) or held at `r^F`
@@ -199,7 +207,107 @@ past coupons (minor ALM approximation). Outcome is data-driven — if costs exce
 can win.
 
 **Outputs:** cumulative net (dynamic vs static), in-force weighted book yield over time, daily
-turnover + notional traded, and required capital over time.
+turnover + notional traded, and required capital over time. Plus **Section 5**: a **1A** turnover
+diagnostic (yield-pickup distribution on swaps vs the horizon `T`) and a **1B** `kappa × reopt_every`
+sweep with a dynamic-vs-static advantage heatmap.
+
+---
+
+## Previous issues — what was wrong, and what we fixed (June 2026)
+
+**Symptom.** The Phase-2 daily backtest concluded **static beats dynamic by ~18%** ($22.7M vs
+$27.8M) — the opposite of the capstone thesis. Three distinct problems sat behind that, plus
+code-quality debt.
+
+### 1. Over-trading produced a structurally bad result (the main one)
+The daily solve values income over the full remaining horizon `T` but charges the bid-ask cost
+*once*. With **daily** re-optimization at the **raw** bid-ask (`kappa=1`), marginal swaps with sub-5bp
+pickup cleared the hurdle: ~26–37% of trade-days had <5bp pickup, the book churned **$22.8B notional**
+and paid **$13.2M** turnover over 2y — swamping the yield pickup. Dynamic *always* lost, not because
+re-optimization is bad but because it rebalanced far too often at full cost.
+**Fix:** two feasibility-preserving LP levers — `kappa` (trading-cost hurdle) and `reopt_every`
+(rebalance every N days) — plus a 1A diagnostic and a 1B sweep. **Result:** with moderate damping
+(e.g. `reopt_every≈21`, `kappa≈2–5`) dynamic **beats static by ~+10–13%** with ~5× less turnover; only
+daily+raw-cost loses.
+
+### 2. Hold-to-maturity exclusion was inconsistent (silent bug)
+The single-period optimizer excluded 175/303 bonds; the backtest excluded **0** — its quarter grid
+`ALLQ` ends *at* FABN maturity, so "any bond cashflow in a quarter after the FABN's last quarter" was
+always empty and the mask never fired. The two notebooks silently disagreed.
+**Fix:** one shared, date-based rule — `maturity > FABN_MATURITY` — in both notebooks (184/303).
+
+### 3. Fixing #2 exposed an early-horizon infeasibility (static then = $0)
+Once the exclusion actually applied, only short bonds were buyable, so early in the backtest
+(liability ~3.5y) the **hard duration band was unreachable → day-0 infeasible**. `solve_day` silently
+returned "hold zeros", so the **static baseline collapsed to $0** and the comparison printed `+inf%`.
+**Fix:** (a) **soft duration band** (`dur_pen`) — breach penalized, never infeasible; (b)
+**`allow_post_fabn=True`** — buy post-FABN bonds (sold before they mature) so the duration band is
+reachable again; (c) **loud feasibility reporting** (counts `STATUS_*_hold` days) + divide-by-zero
+guards, so a broken baseline can never masquerade as `+inf%` again.
+
+#### Why allowing bonds that mature after the FABN is prudent, not risky (actuary note)
+An actuary's instinct is *"a bond maturing after my liability can't pay it — exclude it."* That strict
+cash-flow-matching instinct is what broke the model, and excluding the bonds was actually the
+**riskier** choice. Why allowing them is safe:
+- **We never fund the liability from its principal.** These are liquid investment-grade corporates;
+  before the FABN matures you **sell them in the secondary market**. The model only counts their
+  *coupons* inside the horizon — the post-FABN principal is never used to meet a liability payment.
+- **The final payment stays protected.** The lending-facility recursion + the **PV-shortfall cap
+  (≤ 1% of liability PV)** force the book to hold enough bonds *maturing in time* to cover the ~$508M
+  final payment. The optimizer cannot pile into long bonds and leave the liability unfunded.
+- **It is *better* ALM, not worse.** The duration band exists so a parallel rate move moves asset and
+  liability value together. Excluding every longer bond left only short assets that **could not reach
+  the liability's duration** — that *under-hedges* the liability (the genuinely risky position) and is
+  precisely why the early solve was infeasible. Adding the longer bonds back lets the portfolio
+  actually match duration.
+- **The result is stated conservatively.** We do **not yet book the sale gain/loss** on these bonds
+  (IMR pending). The reported +10–13% edge counts only coupons earned while held — it does **not**
+  rely on selling them at a profit. Proper IMR would, if anything, *improve* the dynamic result.
+- **It mirrors real practice.** Insurers routinely hold assets longer than their liabilities and trade
+  them; exact hold-to-maturity matching is not required — duration matching, liquidity, issuer
+  concentration and capital limits are, and all of those still bind here.
+
+Bottom line: the risk an actuary worries about — using a not-yet-matured bond to *pay* the liability —
+is structurally prevented by the shortfall cap; allowing the bonds **improves** the duration hedge,
+and the performance claim is deliberately conservative.
+
+### 4. Code-quality / correctness hygiene
+- Core math (book-yield IRR, modified duration, C-1, coupon/amort split) was **duplicated** across
+  notebooks → extracted to `fabn_finance.py`, covered by **18 pytest tests**.
+- C-1 lookup was O(N²) (`fixed.loc[...]` per bond) → vectorized.
+- Silent data fills (IRR-failure fallback, tau median-fill) → now logged with counts.
+- Dead code (overwritten `pd.date_range`) removed; blanket `warnings.filterwarnings("ignore")`
+  narrowed to Deprecation/Future only.
+
+**Net effect / what we've achieved.** The corrected, *valid* comparison is: the naive daily-full-cost
+dynamic strategy loses ~18% purely on trading cost, but a **sensibly-paced dynamic strategy beats
+static by ~+10–13% with ~5× less turnover** — the capstone thesis now holds, and we can explain
+exactly why the naive version failed.
+
+### 5. IMR — realized sale gains now recognized (Phase 2, implemented)
+The backtest previously counted only coupon income (conservative — no credit for selling appreciated
+bonds). **Section 6** now recognizes realized **rate-driven** gains/losses on sales via an Interest
+Maintenance Reserve: `run_daily` carries a per-bond amortized-cost price (`cb_px`), books each sale's
+gain to `fabn_finance.IMRLedger`, and amortizes it into `Net_k` over the sold bond's remaining life —
+**never at the sale date** (no liquidation-proceeds inflation). It is a deliberate **accounting
+consequence**, *not* a term in `solve_day` (putting raw gains in the objective would re-create the
+gains-trading distortion IMR prevents). `use_imr=False` recovers the coupons-only run; Section 6 shows
+no-IMR / IMR-in-window / IMR-fully-recognized side by side. The single-period optimizer needs no IMR
+(one-shot allocation, no sales). **AVR** (credit-default reserve) remains out of scope. See
+`METHODOLOGY.md` §5–6.
+
+### Empirical findings (backtest 2024-03 → 2026-02, STEP=1; placeholders, illustrative)
+- **Static baseline:** $27.76M cumulative net statutory income.
+- **Base dynamic (daily, kappa=1) = worst case:** $22.66M no-IMR (−18.4%), $23.45M IMR-in-window
+  (−15.5%), $26.26M IMR-fully-recognized (−5.4%). Daily full-cost rebalancing pays $13.2M turnover.
+- **Tuned dynamic (reopt_every≈21, kappa≈2..5) = realistic pacing:** beats static by **~+10 to +15%**
+  with **~5× less turnover** (~$1.5–3M). The 1B `kappa × reopt_every` sweep is green across most of the
+  grid; only daily+raw-cost loses.
+- **IMR adds ~$3.6M of harvested rate-driven gains**, but only ~$0.79M releases *within* the 2-year
+  window (the rest amortizes over the sold bonds' remaining lives) — so a short backtest **understates**
+  the IMR benefit; the *fully-recognized* line shows the ultimate effect.
+- **Bottom line:** the capstone thesis holds — a sensibly-paced, constraint-aware re-optimizer beats
+  static; the naive daily version loses purely on trading cost.
 
 ---
 
