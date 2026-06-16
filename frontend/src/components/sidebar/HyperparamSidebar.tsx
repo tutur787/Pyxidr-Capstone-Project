@@ -108,9 +108,9 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           <ParamSlider
             symbol="γ"
             label="Cost of capital"
-            description="Scales the full RBC capital cost term (C1 credit risk). Higher = penalise regulatory capital usage more."
+            description="Scales the RBC capital cost term (C1 credit risk). Calibrated default is 0.15. Higher = penalise capital usage more strongly."
             value={params.gamma_w}
-            min={0} max={5} step={0.05}
+            min={0} max={1.0} step={0.01}
             format={v => v.toFixed(2)}
             onChange={v => set('gamma_w', v)}
           />
@@ -118,10 +118,10 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           <ParamSlider
             symbol="λ"
             label="Lending facility cost"
-            description="Penalty per dollar of quarterly cashflow shortfall relative to the FABN liability schedule. Higher = stricter asset–liability cashflow matching."
+            description="Scales the lending facility reinvestment rate (r_lend = r_FABN × λ). Default 1.0 = facility earns r_FABN. Lower = cheaper facility, relaxes CF coverage."
             value={params.lambda_w}
-            min={0} max={10} step={0.1}
-            format={v => v.toFixed(1)}
+            min={0.5} max={2.0} step={0.05}
+            format={v => v.toFixed(2)}
             onChange={v => set('lambda_w', v)}
           />
 
@@ -133,9 +133,9 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           <ParamSlider
             symbol="ε_D"
             label="Duration Gap Tolerance"
-            description="Maximum allowed deviation between portfolio duration and FABN liability duration, in years. Tighter = closer asset–liability duration match."
+            description="Maximum allowed deviation between portfolio duration and FABN liability duration, in years. Calibrated default is 0.3 yr."
             value={params.eps_D}
-            min={0.05} max={3.0} step={0.05}
+            min={0.05} max={2.0} step={0.05}
             format={v => `${v.toFixed(2)} yr`}
             onChange={v => set('eps_D', v)}
           />

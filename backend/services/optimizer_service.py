@@ -82,9 +82,9 @@ def _get_pipeline(date: str) -> dict:
 
 def run(
     date:     str,
-    gamma_w:  float = 1.0,
+    gamma_w:  float = 0.15,   # matches pipeline calibration
     lambda_w: float = 1.0,
-    eps_D:    float = 0.5,
+    eps_D:    float = 0.3,    # matches pipeline calibration
     w_max:    float = 0.05,
     n_min:    int   = 20,
 ) -> dict:

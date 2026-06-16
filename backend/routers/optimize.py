@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api/optimize", tags=["optimize"])
 @router.get("")
 async def run_optimizer(
     date:     str   = "2025-01-15",
-    gamma_w:  float = 1.0,
+    gamma_w:  float = 0.15,   # matches pipeline calibration
     lambda_w: float = 1.0,
-    eps_D:    float = 0.5,
+    eps_D:    float = 0.3,    # matches pipeline calibration
     w_max:    float = 0.05,
     n_min:    int   = 20,
 ):

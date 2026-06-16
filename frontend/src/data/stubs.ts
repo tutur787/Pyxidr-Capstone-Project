@@ -45,9 +45,9 @@ export const stubNews: NewsItem[] = [
 ]
 
 export const defaultHyperParams: HyperParams = {
-  gamma_w:  1.0,
-  lambda_w: 1.0,
-  eps_D:    0.5,
+  gamma_w:  0.15,   // matches pipeline calibration
+  lambda_w: 1.0,    // r_lend = r_FABN * 1.0 (no scaling)
+  eps_D:    0.3,    // matches pipeline calibration
   w_max:    0.05,
   n_min:    20,
 }
