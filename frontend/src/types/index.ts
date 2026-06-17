@@ -91,6 +91,33 @@ export interface CashflowRow {
   facility_bal:  number
 }
 
+export interface ShadowPriceRow {
+  label: string
+  dual:  number | null
+  unit:  string
+}
+
+export interface ImrPeriod {
+  period:      string
+  imr_balance: number
+  imr_release: number
+}
+
+export interface ImrContribution {
+  cusip:         string
+  sale_usd:      number
+  mid_price:     number
+  realized_gain: number
+}
+
+export interface StaticComparison {
+  nii:          number
+  capital_cost: number
+  sap:          number
+  duration:     number
+  n_bonds:      number
+}
+
 export interface OptimizerResult {
   status:           'optimal' | 'infeasible' | 'error'
   date:             string
@@ -112,5 +139,10 @@ export interface OptimizerResult {
   trades:           Trade[]
   constraints:      ConstraintResult[]
   cashflows:        CashflowRow[]
+  shadow_prices:    ShadowPriceRow[]
+  imr_schedule:     ImrPeriod[]
+  imr_total_gain:   number
+  imr_contributions: ImrContribution[]
+  static_comparison: StaticComparison
   error?:           string
 }

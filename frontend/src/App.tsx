@@ -153,7 +153,9 @@ export default function App() {
           loading={optimizerLoading}
         />
       )}
-      {activeModal === 'strategy-tracking' && <StrategyTracking onClose={closeModal} />}
+      {activeModal === 'strategy-tracking' && (
+        <StrategyTracking onClose={closeModal} result={optimizerResult} />
+      )}
       {activeModal === 'risk' && (
         <Risk
           onClose={closeModal}

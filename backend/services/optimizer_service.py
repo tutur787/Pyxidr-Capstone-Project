@@ -22,6 +22,8 @@ import os
 import runpy
 from collections import OrderedDict
 
+import sys
+
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -34,6 +36,12 @@ PROJECT_ROOT  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 PIPELINE_PATH = os.path.join(PROJECT_ROOT, 'Optimization', 'fabn_data_pipeline.py')
 
 load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+
+# fabn_finance lives in Optimization/ — add to path so it can be imported directly
+_OPT_DIR = os.path.join(PROJECT_ROOT, 'Optimization')
+if _OPT_DIR not in sys.path:
+    sys.path.insert(0, _OPT_DIR)
+import fabn_finance as ff
 
 # ── FABN date range ────────────────────────────────────────────────────────────
 _FABN_ISSUE    = pd.Timestamp("2022-09-06")
@@ -376,6 +384,92 @@ def _solve(
             "facility_bal":  round(float(B_vals[q]), 2),
         })
 
+    # ── 4. Shadow prices (dual values of key constraints) ─────────────────
+    def _safe_pi(name: str) -> float | None:
+        try:
+            return round(model.getConstrByName(name).Pi, 6)
+        except Exception:
+            return None
+
+    dur_upper_pi = _safe_pi("dur_upper") or 0.0
+    dur_lower_pi = _safe_pi("dur_lower") or 0.0
+    pv_sf_pi     = _safe_pi("pv_shortfall_limit") or 0.0
+    budget_pi    = _safe_pi("budget")
+
+    shadow_prices = [
+        {
+            "label": "Budget (per $1 extra capital)",
+            "dual":  budget_pi,
+            "unit":  "$/$ ",
+        },
+        {
+            "label": "Duration gap — upper (per 0.1yr wider band)",
+            "dual":  round(dur_upper_pi * H * 0.1, 2),
+            "unit":  "$",
+        },
+        {
+            "label": "Duration gap — lower (per 0.1yr wider band)",
+            "dual":  round(dur_lower_pi * H * 0.1, 2),
+            "unit":  "$",
+        },
+        {
+            "label": "PV Shortfall cap (per $1M relaxed)",
+            "dual":  round(pv_sf_pi * 1e6, 2),
+            "unit":  "$",
+        },
+    ]
+
+    # ── 5. IMR schedule ────────────────────────────────────────────────────
+    # For each SELL trade, realized gain enters the IMR and amortizes over
+    # the sold bond's remaining life. book_price = 100 (par) since h_curr is
+    # an equal-weight placeholder with no real cost basis.
+    ledger = ff.IMRLedger()
+    imr_contributions: list[dict] = []
+    for i in range(N):
+        delta = float(h_opt[i] - h_curr[i])
+        if delta < -100_000:
+            sale_bv = abs(delta)
+            gain    = ff.realized_gain_on_sale(sale_bv, float(price[i]), 100.0)
+            rem_yrs = max(float(durs[i]), 0.25)
+            ledger.add_realized(gain, rem_yrs)
+            if abs(gain) > 1.0:
+                cusip = CUSIPS[i]
+                imr_contributions.append({
+                    "cusip":         cusip,
+                    "sale_usd":      round(sale_bv, 2),
+                    "mid_price":     round(float(price[i]), 2),
+                    "realized_gain": round(float(gain), 2),
+                })
+
+    imr_schedule: list[dict] = []
+    for q in range(Q):
+        released = ledger.accrue(dt_q)
+        imr_schedule.append({
+            "period":      str(qtr_idx[q]),
+            "imr_balance": round(ledger.balance, 2),
+            "imr_release": round(float(released), 2),
+        })
+    imr_total_gain = round(sum(c["realized_gain"] for c in imr_contributions), 2)
+
+    # ── 6. Static benchmark (equal-weight across eligible bonds) ──────────
+    eligible   = ~post_fabn_mask
+    n_eligible = int(eligible.sum())
+    h_static   = np.where(eligible, H / max(n_eligible, 1), 0.0)
+
+    static_nii      = float((nii_rate * h_static).sum())
+    static_rbc      = float((theta * h_static).sum())
+    static_cap_cost = lambda_cap * static_rbc
+    static_dur      = float((durs * h_static).sum()) / H
+    static_sap      = static_nii - static_cap_cost
+
+    static_comparison = {
+        "nii":          round(static_nii, 2),
+        "capital_cost": round(static_cap_cost, 2),
+        "sap":          round(static_sap, 2),
+        "duration":     round(static_dur, 4),
+        "n_bonds":      n_eligible,
+    }
+
     return {
         "status":           "optimal",
         "date":             date,
@@ -400,4 +494,10 @@ def _solve(
         "trades":           trades,
         "constraints":      constraints,
         "cashflows":        cashflows,
+        # Strategy Tracking
+        "shadow_prices":      shadow_prices,
+        "imr_schedule":       imr_schedule,
+        "imr_total_gain":     imr_total_gain,
+        "imr_contributions":  imr_contributions,
+        "static_comparison":  static_comparison,
     }
