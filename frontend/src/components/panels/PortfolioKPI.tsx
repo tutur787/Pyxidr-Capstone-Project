@@ -111,10 +111,10 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading }
 
         {isOptimal && optimizerResult && (
           <div className="mt-4 pt-4 border-t border-gray-800">
-            <p className="text-gray-600 text-xs mb-2 uppercase tracking-wider">NEV Breakdown</p>
+            <p className="text-gray-600 text-xs mb-2 uppercase tracking-wider">SAP Breakdown</p>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="bg-gray-800/40 rounded-lg p-2.5">
-                <p className="text-gray-500">Spread Income</p>
+                <p className="text-gray-500">Statutory NII</p>
                 <p className="text-emerald-400 font-mono font-semibold mt-0.5">
                   ${(optimizerResult.spread_income / 1e6).toFixed(2)}M
                 </p>
@@ -126,7 +126,7 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading }
                 </p>
               </div>
               <div className="bg-gray-800/40 rounded-lg p-2.5">
-                <p className="text-gray-500">Net Econ. Value</p>
+                <p className="text-gray-500">SAP Objective</p>
                 <p className="text-amber-400 font-mono font-semibold mt-0.5">
                   ${(optimizerResult.nev / 1e6).toFixed(2)}M
                 </p>

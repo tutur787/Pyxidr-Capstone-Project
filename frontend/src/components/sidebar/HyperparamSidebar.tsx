@@ -86,7 +86,7 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           <div>
             <h2 className="text-white font-semibold text-sm">Optimizer Parameters</h2>
             <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">
-              Controls passed to <span className="font-mono text-gray-400">update_user_params()</span>
+              Controls passed to the SAP optimizer via <span className="font-mono text-gray-400">/api/optimize</span>
             </p>
           </div>
           <button
@@ -102,23 +102,23 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
 
           <SectionHeader
             title="Objective Weights"
-            subtitle="Scale each term in the NEV objective: maximize spread_income − capital_cost − txn_cost − cf_penalty"
+            subtitle="Scale each term in the SAP objective: maximize NII − lambda·RBC − turnover − liq_penalty + savings"
           />
 
           <ParamSlider
             symbol="γ"
-            label="Cost of capital"
-            description="Scales the RBC capital cost term (C1 credit risk). Calibrated default is 0.15. Higher = penalise capital usage more strongly."
+            label="Cost of capital (WACC)"
+            description="Insurer WACC on required capital. Sets λ_cap = γ × 1.5, the coefficient on RBC = Σθᵢhᵢ in the SAP objective. Calibrated default 0.15 (15%). Higher = penalise RBC usage more strongly."
             value={params.gamma_w}
             min={0} max={1.0} step={0.01}
-            format={v => v.toFixed(2)}
+            format={v => `${(v * 100).toFixed(0)}%`}
             onChange={v => set('gamma_w', v)}
           />
 
           <ParamSlider
             symbol="λ"
-            label="Lending facility cost"
-            description="Scales the lending facility reinvestment rate (r_lend = r_FABN × λ). Default 1.0 = facility earns r_FABN. Lower = cheaper facility, relaxes CF coverage."
+            label="Savings rate scalar"
+            description="Scales the lending-facility reinvestment rate: r_save = r_FABN × λ. Default 1.0 = surplus earns r_FABN (3.205%). Higher = more savings income, rewarding CF surplus accumulation."
             value={params.lambda_w}
             min={0.5} max={2.0} step={0.05}
             format={v => v.toFixed(2)}

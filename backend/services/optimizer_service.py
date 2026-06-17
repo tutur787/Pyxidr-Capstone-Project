@@ -1,8 +1,14 @@
 """
-Optimizer service — wraps fabn_data_pipeline.py + Gurobi LP solve.
+Optimizer service — wraps Optimization/fabn_data_pipeline.py + SAP Gurobi solve.
 
 Usage:
     result = run(date, gamma_w, lambda_w, eps_D, w_max, n_min)
+
+    gamma_w  = cost_of_capital (insurer WACC, e.g. 0.15 = 15%)
+    lambda_w = lending-facility reinvestment rate scalar (r_save = r_FABN × lambda_w)
+    eps_D    = duration gap tolerance (years)
+    w_max    = max single-bond weight fraction
+    n_min    = min distinct bonds (enforced via effective_delta)
 
 The pipeline is cached per date (max 5 entries, LRU eviction).
 Each call to `run` is expected to come from asyncio.to_thread so it never
@@ -25,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # backend/services/optimizer_service.py → ../../ = project root
 PROJECT_ROOT  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-PIPELINE_PATH = os.path.join(PROJECT_ROOT, 'fabn_data_pipeline.py')
+PIPELINE_PATH = os.path.join(PROJECT_ROOT, 'Optimization', 'fabn_data_pipeline.py')
 
 load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
 
@@ -43,20 +49,12 @@ _CACHE_MAX = 5
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _get_pipeline(date: str) -> dict:
-    """
-    Return the pipeline dict for the given date string (YYYY-MM-DD).
-    Validates the date, checks the LRU cache, and runs fabn_data_pipeline.py
-    via runpy if not cached.
-    """
+    """Return the pipeline dict for the given date string (YYYY-MM-DD)."""
     ts = pd.Timestamp(date)
     if ts <= _FABN_ISSUE:
-        raise ValueError(
-            f"Date {date} must be after FABN issue ({_FABN_ISSUE.date()})"
-        )
+        raise ValueError(f"Date {date} must be after FABN issue ({_FABN_ISSUE.date()})")
     if ts >= _FABN_MATURITY:
-        raise ValueError(
-            f"Date {date} must be before FABN maturity ({_FABN_MATURITY.date()})"
-        )
+        raise ValueError(f"Date {date} must be before FABN maturity ({_FABN_MATURITY.date()})")
 
     if date in _pipeline_cache:
         _pipeline_cache.move_to_end(date)
@@ -82,16 +80,13 @@ def _get_pipeline(date: str) -> dict:
 
 def run(
     date:     str,
-    gamma_w:  float = 0.15,   # matches pipeline calibration
-    lambda_w: float = 1.0,
-    eps_D:    float = 0.3,    # matches pipeline calibration
+    gamma_w:  float = 0.15,   # cost_of_capital (WACC), matches pipeline calibration
+    lambda_w: float = 1.0,    # lending-facility rate scalar
+    eps_D:    float = 0.3,    # duration gap tolerance (years)
     w_max:    float = 0.05,
     n_min:    int   = 20,
 ) -> dict:
-    """
-    Run the FABN optimizer for a given date and hyperparameters.
-    Always returns a dict with at least {"status": …, "date": …}.
-    """
+    """Run the FABN SAP optimizer for a given date and hyperparameters."""
     try:
         return _solve(date, gamma_w, lambda_w, eps_D, w_max, n_min)
     except Exception as exc:
@@ -100,13 +95,13 @@ def run(
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Core solve
+# Core SAP solve
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _solve(
     date:     str,
-    gamma_w:  float,
-    lambda_w: float,
+    gamma_w:  float,   # cost_of_capital / WACC
+    lambda_w: float,   # r_save = r_FABN * lambda_w
     eps_D:    float,
     w_max:    float,
     n_min:    int,
@@ -120,42 +115,52 @@ def _solve(
     N           = pipeline["N"]
     Q           = pipeline["Q"]
     CUSIPS      = pipeline["CUSIPS"]
-    spread      = pipeline["spread"]       # (N,) decimal, NaN-filled
+    book_yield  = pipeline["book_yield"]   # (N,) effective-interest yield
+    coupon_inc  = pipeline["coupon_inc"]   # (N,) statutory coupon yield
+    amort_inc   = pipeline["amort_inc"]    # (N,) amortization/accretion yield
+    spread      = pipeline["spread"]       # (N,) OAS spread (for reporting)
     durs        = pipeline["durs"]         # (N,) modified duration
     theta       = pipeline["theta"]        # (N,) C-1 RBC factor
-    h_curr      = pipeline["h_curr"]       # (N,) current allocation
-    qtr_bond_cf = pipeline["qtr_bond_cf"]  # (Q, N) quarterly CF per $1 face
-    qtr_fabn_cf = pipeline["qtr_fabn_cf"]  # (Q,)  FABN liability CF
+    tau_raw     = pipeline["tau"]          # (N,) bid-ask half-spread (raw)
+    h_curr      = pipeline["h_curr"]       # (N,) current allocation ($)
+    price       = pipeline["price"]        # (N,) mid price per 100 face
+    qtr_bond_cf = pipeline["qtr_bond_cf"]  # (Q, N)
+    qtr_fabn_cf = pipeline["qtr_fabn_cf"]  # (Q,)
     qtr_idx     = pipeline["qtr_idx"]
-    H           = pipeline["H"]            # total budget ($)
-    r_FABN      = pipeline["r_FABN"]       # FABN funding rate (annual)
-    D_FABN      = pipeline["D_FABN"]       # liability modified duration
-    C_curr      = pipeline["C_curr"]       # current regulatory capital
-    C_min       = pipeline["C_min"]        # minimum required capital
-    RBC_bar     = pipeline["RBC_bar"]      # minimum solvency ratio
-    dt          = pipeline["dt"]           # time scaling (annual)
-    alpha_w     = pipeline["alpha_w"]      # C3 duration scaling
-    tau         = pipeline["tau"]          # transaction cost per bond
-    score       = pipeline["score"]        # spread + beta*signal
+    H           = pipeline["H"]
+    r_FABN      = pipeline["r_FABN"]
+    D_FABN      = pipeline["D_FABN"]
+    RBC_bar     = pipeline["RBC_bar"]
     fixed_df    = pipeline["fixed"].set_index("CUSIP")
 
-    # ── 1B. Parameter overrides from user ──────────────────────────────────
-    # lambda_w controls the lending facility rate: 1.0 → r_lend = r_FABN (default)
-    r_lend = r_FABN * lambda_w
+    # ── 1B. SAP parameters from user inputs ───────────────────────────────
+    # gamma_w is cost_of_capital (insurer WACC); lambda_cap = WACC * RBC_bar
+    cost_of_capital = gamma_w
+    lambda_cap      = cost_of_capital * RBC_bar
 
-    # effective_delta: tighter per-issuer cap ensures at least n_min bonds
+    # Lending-facility reinvestment rate
+    r_save = r_FABN * lambda_w
+
+    # effective_delta: tighter per-issuer cap forces at least n_min bonds
     effective_delta = min(w_max, 1.0 / max(n_min, 1))
 
-    phi_sf = 0.01    # PV shortfall hard cap (1 % of PV liability)
-    dt_q   = 0.25    # one quarter = 0.25 yrs
+    # Bid-ask half-spread ×10 (same scaling convention as SAP notebook)
+    tau = tau_raw * 10
+
+    eta    = 1.0    # liquidity penalty weight
+    phi_sf = 0.01   # PV shortfall hard cap (1% of PV liability)
+    dt_q   = 0.25   # quarter length in years
+
+    # Net NII rate: book_yield - r_FABN
+    nii_rate = book_yield - r_FABN
 
     # ── 2. Build Gurobi model ──────────────────────────────────────────────
-    model = gp.Model("FABN_NEV_Optimizer")
+    model = gp.Model("FABN_SAP_Optimizer")
     model.Params.LogToConsole = 0
     model.Params.OutputFlag   = 0
 
     # 2A. Decision variables
-    h = model.addVars(N, lb=0.0, name="h")
+    h        = model.addVars(N, lb=0.0, name="h")
 
     # 2B. Auxiliary variables
     d_pos    = model.addVar(lb=0.0, name="d_pos")
@@ -165,24 +170,35 @@ def _solve(
     B        = model.addVars(Q, lb=0.0, name="B")
     s_net    = model.addVars(Q, lb=0.0, name="s_net")
 
-    # 2C. Objective — maximize NEV
-    spread_income = gp.quicksum(score[i] * h[i] for i in range(N))
-    C1            = gp.quicksum(theta[i] * h[i] for i in range(N))
-    C3            = alpha_w * (d_pos + d_neg)
-    capital_cost  = gamma_w * (C1 + C3)
-    txn_cost      = gp.quicksum(tau[i] * (tc_plus[i] + tc_minus[i]) for i in range(N))
-    NEV           = spread_income - capital_cost - txn_cost
-    model.setObjective(NEV, GRB.MAXIMIZE)
+    # Discount factors at r_FABN
+    t_quarters = [dt_q * (q + 1) for q in range(Q)]
+    df_q       = [(1.0 + r_FABN) ** (-t) for t in t_quarters]
 
-    # 2D. Core constraints
+    # 2C. Hold-to-maturity exclusion: bonds maturing after FABN cannot fund it
+    _maturity = pd.to_datetime(
+        pipeline["fixed"].set_index("CUSIP").loc[CUSIPS, "maturity"]
+    ).values.astype("datetime64[ns]")
+    post_fabn_mask = _maturity > np.datetime64(_FABN_MATURITY)
+    for i in range(N):
+        if post_fabn_mask[i]:
+            h[i].ub = 0.0
+
+    # 2D. SAP Objective
+    NII            = gp.quicksum(nii_rate[i] * h[i]              for i in range(N))
+    RBC            = gp.quicksum(theta[i]    * h[i]              for i in range(N))
+    capital_cost   = lambda_cap * RBC
+    turnover_cost  = gp.quicksum(tau[i] * (tc_plus[i] + tc_minus[i]) for i in range(N))
+    liq_penalty    = eta * gp.quicksum(df_q[q] * s_net[q]       for q in range(Q))
+    savings_income = r_save * dt_q * gp.quicksum(B[q]           for q in range(Q - 1))
+
+    SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income
+    model.setObjective(SAP, GRB.MAXIMIZE)
+
+    # 2E. Constraints
+    # Budget
     model.addConstr(gp.quicksum(h[i] for i in range(N)) == H, name="budget")
 
-    rbc_rhs = (RBC_bar * C_min - C_curr) / dt
-    model.addConstr(
-        gp.quicksum(spread[i] * h[i] for i in range(N)) >= rbc_rhs,
-        name="solvency",
-    )
-
+    # Duration alignment band
     model.addConstr(
         gp.quicksum(durs[i] * h[i] for i in range(N)) - D_FABN * H == d_pos - d_neg,
         name="dur_gap_decomp",
@@ -190,38 +206,20 @@ def _solve(
     model.addConstr(d_pos <= eps_D * H, name="dur_upper")
     model.addConstr(d_neg <= eps_D * H, name="dur_lower")
 
+    # Turnover decomposition
     for i in range(N):
-        model.addConstr(
-            h[i] - h_curr[i] == tc_plus[i] - tc_minus[i],
-            name=f"tc_decomp_{i}",
-        )
+        model.addConstr(h[i] - h_curr[i] == tc_plus[i] - tc_minus[i], name=f"tc_decomp_{i}")
 
-    # Bond liquidation at FABN maturity: discount future CFs of long bonds
-    fabn_last_q = max(q for q in range(Q) if float(qtr_fabn_cf[q]) > 0)
-    aug_bond_cf = qtr_bond_cf.copy().astype(float)
-    for _i in range(N):
-        for _q in range(fabn_last_q + 1, Q):
-            _dt_q = (_q - fabn_last_q) * dt_q
-            aug_bond_cf[fabn_last_q, _i] += qtr_bond_cf[_q, _i] * (1.0 + r_FABN) ** (-_dt_q)
-            aug_bond_cf[_q, _i] = 0.0
-
-    # Discount factors for PV shortfall constraint
-    t_quarters = [dt_q * (q + 1) for q in range(Q)]
-    df_q = [(1.0 + r_FABN) ** (-t) for t in t_quarters]
-
-    # Lending facility balance dynamics
+    # Lending-facility dynamics (direct qtr_bond_cf; no aug_bond_cf for SAP)
     for q in range(Q):
-        CF_A_q = gp.quicksum(aug_bond_cf[q, i] * h[i] for i in range(N))
+        CF_A_q = gp.quicksum(qtr_bond_cf[q, i] * h[i] for i in range(N))
         CF_L_q = float(qtr_fabn_cf[q])
         if q == 0:
-            model.addConstr(
-                B[q] - s_net[q] == CF_A_q - CF_L_q,
-                name=f"facility_balance_{q}",
-            )
+            model.addConstr(B[q] - s_net[q] == CF_A_q - CF_L_q, name=f"facility_{q}")
         else:
             model.addConstr(
-                B[q] - s_net[q] == (1.0 + r_lend * dt_q) * B[q - 1] + CF_A_q - CF_L_q,
-                name=f"facility_balance_{q}",
+                B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q - CF_L_q,
+                name=f"facility_{q}",
             )
 
     # PV shortfall hard cap
@@ -231,7 +229,7 @@ def _solve(
         name="pv_shortfall_limit",
     )
 
-    # 2E. Issuer concentration constraint (always active; effective_delta from params)
+    # Issuer concentration cap
     issuer_groups: dict[str, list[int]] = {}
     for idx, cusip in enumerate(CUSIPS):
         issuer_groups.setdefault(cusip[:6], []).append(idx)
@@ -256,23 +254,28 @@ def _solve(
     # ── 3. Extract results ─────────────────────────────────────────────────
     h_opt = np.array([h[i].X for i in range(N)])
 
-    nev_val           = model.ObjVal
-    C1_val            = float(sum(theta[i] * h_opt[i] for i in range(N)))
-    C3_val            = float(alpha_w * (d_pos.X + d_neg.X))
-    capital_cost_val  = float(gamma_w * (C1_val + C3_val))
-    spread_income_val = float(sum(score[i] * h_opt[i] for i in range(N)))
-    txn_cost_val      = float(sum(tau[i] * (tc_plus[i].X + tc_minus[i].X) for i in range(N)))
+    sap_val          = model.ObjVal
+    nii_val          = float(sum(nii_rate[i]  * h_opt[i] for i in range(N)))
+    coupon_val       = float(sum(coupon_inc[i] * h_opt[i] for i in range(N)))
+    amort_val        = float(sum(amort_inc[i]  * h_opt[i] for i in range(N)))
+    RBC_val          = float(sum(theta[i]      * h_opt[i] for i in range(N)))
+    capital_cost_val = lambda_cap * RBC_val
+    turnover_val     = float(sum(tau[i] * (tc_plus[i].X + tc_minus[i].X) for i in range(N)))
+    B_vals           = [B[q].X     for q in range(Q)]
+    s_net_vals       = [s_net[q].X for q in range(Q)]
+    liq_val          = eta * float(sum(df_q[q] * s_net_vals[q] for q in range(Q)))
+    savings_val      = r_save * dt_q * float(sum(B_vals[q] for q in range(Q - 1)))
 
-    D_avg   = float(sum(durs[i] * h_opt[i] for i in range(N))) / H
-    RBC_val = (C_curr + float(sum(spread[i] * h_opt[i] for i in range(N))) * dt) / C_min
+    D_avg        = float(sum(durs[i] * h_opt[i] for i in range(N))) / H
+    req_cap      = RBC_bar * RBC_val
+    earn_per_cap = nii_val / req_cap if req_cap > 0 else 0.0
 
-    weighted_avg_spread = float(sum(spread[i] * h_opt[i] for i in range(N))) / H
-    yield_pct_val = (r_FABN + weighted_avg_spread) * 100
-
-    pv_shortfall_val = float(sum(s_net[q].X * df_q[q] for q in range(Q)))
-    pv_sf_cap        = phi_sf * PV_liability
-
-    selected_mask = h_opt > 1.0
+    # Weighted-average book yield and OAS spread
+    selected_mask     = h_opt > 1.0
+    wtd_book_yield    = float(sum(book_yield[i] * h_opt[i] for i in range(N))) / H
+    wtd_spread        = float(sum(spread[i] * h_opt[i] for i in range(N))) / H
+    pv_shortfall_val  = float(sum(s_net_vals[q] * df_q[q] for q in range(Q)))
+    pv_sf_cap         = phi_sf * PV_liability
 
     # Constraints
     constraints = [
@@ -281,12 +284,6 @@ def _solve(
             "value": round(float(h_opt.sum()), 2),
             "bound": round(float(H), 2),
             "pass":  bool(abs(h_opt.sum() - H) < 1.0),
-        },
-        {
-            "label": "Solvency (RBC)",
-            "value": round(float(RBC_val), 4),
-            "bound": round(float(RBC_bar), 4),
-            "pass":  bool(RBC_val >= RBC_bar),
         },
         {
             "label": "Duration Gap",
@@ -299,6 +296,12 @@ def _solve(
             "value": round(float(pv_shortfall_val), 2),
             "bound": round(float(pv_sf_cap), 2),
             "pass":  bool(pv_shortfall_val <= pv_sf_cap),
+        },
+        {
+            "label": f"HtM Excluded ({int(post_fabn_mask.sum())} bonds)",
+            "value": int(post_fabn_mask.sum()),
+            "bound": N,
+            "pass":  True,
         },
     ]
 
@@ -320,13 +323,11 @@ def _solve(
             "weight":     round(float(h_opt[i] / H), 6),
             "spread_bps": round(float(spread[i] * 1e4), 2),
             "duration":   round(float(durs[i]), 4),
-            "score_bps":  round(float(score[i] * 1e4), 2),
+            "score_bps":  round(float(book_yield[i] * 1e4), 2),  # book yield in bps
         })
     alloc_list.sort(key=lambda x: x["h_opt"], reverse=True)
 
-    # Trades (|delta_usd| > $100k).
-    # Return top 15 BUYs + top 15 SELLs separately so neither side crowds out
-    # the other — sorted by magnitude within each group, BUYs first.
+    # Trades: top 15 BUYs + top 15 SELLs, both sorted by magnitude
     buys_raw:  list[dict] = []
     sells_raw: list[dict] = []
     for i in range(N):
@@ -351,13 +352,13 @@ def _solve(
         else:
             sells_raw.append(entry)
 
-    buys_raw.sort(key=lambda x: x["delta_usd"], reverse=True)          # largest buy first
-    sells_raw.sort(key=lambda x: x["delta_usd"])                       # largest sell (most negative) first
+    buys_raw.sort(key=lambda x: x["delta_usd"], reverse=True)    # largest buy first
+    sells_raw.sort(key=lambda x: x["delta_usd"])                  # largest sell first
     trades = buys_raw[:15] + sells_raw[:15]
 
-    # Cashflows (quarters where FABN CF > 0 only)
+    # Cashflows (quarters where FABN CF > 0)
     CF_A_vals = [
-        float(sum(aug_bond_cf[q, i] * h_opt[i] for i in range(N)))
+        float(sum(qtr_bond_cf[q, i] * h_opt[i] for i in range(N)))
         for q in range(Q)
     ]
     cashflows: list[dict] = []
@@ -371,27 +372,28 @@ def _solve(
             "fabn_cf":       round(fabn_cf_q, 2),
             "asset_cf":      round(asset_cf_q, 2),
             "surplus":       round(asset_cf_q - fabn_cf_q, 2),
-            "shortfall_net": round(float(s_net[q].X), 2),
-            "facility_bal":  round(float(B[q].X), 2),
+            "shortfall_net": round(float(s_net_vals[q]), 2),
+            "facility_bal":  round(float(B_vals[q]), 2),
         })
 
     return {
         "status":           "optimal",
         "date":             date,
-        # KPIs
+        # Portfolio KPIs
         "n_bonds_universe": int(N),
         "n_bonds_selected": int(selected_mask.sum()),
-        "spread_bps":       round(float(weighted_avg_spread * 1e4), 2),
+        "spread_bps":       round(float(wtd_spread * 1e4), 2),
         "duration":         round(float(D_avg), 4),
-        "yield_pct":        round(float(yield_pct_val), 3),
-        "rbc_c1_usage":     round(float(C1_val / H), 4),
-        "rbc_ratio":        round(float(RBC_val), 2),
-        "nev":              round(float(nev_val), 2),
-        "spread_income":    round(float(spread_income_val), 2),
-        "capital_cost":     round(float(capital_cost_val), 2),
-        "c1_cost":          round(float(C1_val), 2),
-        "c3_cost":          round(float(C3_val), 2),
-        "txn_cost":         round(float(txn_cost_val), 2),
+        "yield_pct":        round(float(wtd_book_yield * 100), 3),   # wtd-avg book yield
+        "rbc_c1_usage":     round(float(RBC_val / H), 4),
+        "rbc_ratio":        round(float(earn_per_cap), 4),           # statutory earnings / req. capital
+        # SAP objective decomposition (mapped to existing frontend keys)
+        "nev":              round(float(sap_val), 2),                # SAP objective value
+        "spread_income":    round(float(nii_val), 2),                # Statutory NII
+        "capital_cost":     round(float(capital_cost_val), 2),       # lambda_cap * RBC
+        "c1_cost":          round(float(RBC_val), 2),                # Sum theta_i * h_i
+        "c3_cost":          round(float(savings_val), 2),            # savings income
+        "txn_cost":         round(float(turnover_val), 2),
         "duration_gap":     round(float(abs(D_avg - D_FABN)), 4),
         # Detail arrays
         "allocations":      alloc_list,
