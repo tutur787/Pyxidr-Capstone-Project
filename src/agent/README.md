@@ -26,7 +26,7 @@ User message (chat) or JSON (turn/run/select)
 |------|------|
 | **`schemas.py`** | Pydantic models: `RunRequest`, `SelectRequest`, `AgentTurn`. Contract between LLM, CLI, and orchestrator. |
 | **`validators.py`** | Fail-closed checks (e.g. no future `optimization_date`, positive `budget_usd`). Raises `ValidationError`. |
-| **`mapper.py`** | Maps `RunRequest` fields onto `FabnPipelineParams` (`H`, `eps_D`, `RBC_bar`, `lambda_w`, `gamma_w`, …). |
+| **`mapper.py`** | Maps `RunRequest` fields onto `FabnPipelineParams` (`H`, `eps_D`, `RBC_bar`, `cost_of_capital`→`gamma_w`, `savings_rate_scalar`→`lambda_w`, `w_max`, `n_min`). |
 | **`catalog.py`** | Fixed **SELECT** queries: `summary_metrics`, `top_holdings_delta`. No LLM-generated SQL/pandas. |
 | **`orchestrator.py`** | `AgentSession`, `handle_turn()`, `translate_user_message()`, JSON response formatting. |
 | **`qwen_translator.py`** | Hugging Face Inference API client for `Qwen/Qwen2.5-7B-Instruct` (env: `HF_TOKEN`, optional `HF_AGENT_MODEL`). |
@@ -77,7 +77,7 @@ make agent-chat   # interactive REPL
 
 ## Design notes
 
-- **Deterministic core:** All optimization math lives in `fabn_pipeline.py` and `fabn_optimizer.py`; the agent only orchestrates.
+- **Deterministic core:** All optimization math lives in `src/fabn_pipeline.py`, `src/fabn_sap_solve.py`, and `src/fabn_finance.py`; the agent only orchestrates.
 - **Confirm gate:** Runs with side effects require `confirm: true` on `RunRequest` (typically after a preview turn).
 - **Session state:** `AgentSession` holds `last_job` (for SELECT) and `chat_history` (for multi-turn Qwen calls). State is in-process only (not persisted across CLI invocations unless using `--repl` in one process).
 
@@ -87,6 +87,7 @@ make agent-chat   # interactive REPL
 |------|----------------|
 | [`../fabn_job.py`](../fabn_job.py) | `run_fabn_job()` — build → solve → export |
 | [`../fabn_pipeline.py`](../fabn_pipeline.py) | `FabnPipelineParams`, `build_pipeline()` |
+| [`../fabn_sap_solve.py`](../fabn_sap_solve.py) | `solve_sap()` |
 | [`../agent_cli.py`](../agent_cli.py) | CLI: `turn`, `run`, `select`, `chat` |
 
 Tests for this package live in [`../../tests/`](../../tests/README.md).

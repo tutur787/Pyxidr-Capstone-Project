@@ -72,8 +72,10 @@ def _handle_run(req: RunRequest, *, session: AgentSession) -> AgentResponse:
             "budget_usd": params.H,
             "duration_band_years": params.eps_D,
             "rbc_target": params.RBC_bar,
-            "cf_penalty_weight": params.lambda_w,
-            "capital_cost_weight": params.gamma_w,
+            "cost_of_capital": params.gamma_w,
+            "savings_rate_scalar": params.lambda_w,
+            "w_max": params.w_max,
+            "n_min": params.n_min,
         }
         return AgentResponse(
             ok=True,

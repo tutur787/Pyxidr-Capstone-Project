@@ -21,6 +21,7 @@ LOG_LEVEL            : logging level (default INFO)
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 from fabn_job import run_fabn_job

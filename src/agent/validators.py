@@ -21,12 +21,14 @@ def validate_run_request(req: RunRequest, *, today: date | None = None) -> None:
         raise ValidationError("duration_band_years must be positive")
     if req.rbc_target is not None and req.rbc_target < 1.0:
         raise ValidationError("rbc_target must be >= 1.0")
-    for name, val in (
-        ("cf_penalty_weight", req.cf_penalty_weight),
-        ("capital_cost_weight", req.capital_cost_weight),
-    ):
-        if val is not None and val < 0:
-            raise ValidationError(f"{name} must be non-negative")
+    if req.cost_of_capital is not None and req.cost_of_capital < 0:
+        raise ValidationError("cost_of_capital must be non-negative")
+    if req.savings_rate_scalar is not None and req.savings_rate_scalar <= 0:
+        raise ValidationError("savings_rate_scalar must be positive")
+    if req.w_max is not None and not (0 < req.w_max <= 1.0):
+        raise ValidationError("w_max must be in (0, 1]")
+    if req.n_min is not None and req.n_min < 1:
+        raise ValidationError("n_min must be >= 1")
 
 
 def validate_select_request(req: SelectRequest, *, has_last_job: bool) -> None:

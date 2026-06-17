@@ -26,12 +26,19 @@ def synthetic_job() -> SimpleNamespace:
         "CUSIPS": ["A", "B", "C"],
         "h_curr": h_curr,
         "spread": np.array([0.01, 0.02, 0.03]),
+        "book_yield": np.array([0.04, 0.05, 0.06]),
     }
     solve = SimpleNamespace(
         status=_GRB_OPTIMAL,
-        nev_val=1_000_000.0,
+        sap_val=1_000_000.0,
+        nii_val=800_000.0,
+        capital_cost_val=200_000.0,
+        savings_val=50_000.0,
+        turnover_val=10_000.0,
+        liq_val=5_000.0,
         h_opt=h_opt,
-        RBC_val=1.6,
+        RBC_val=1_600_000.0,
+        earn_per_cap=0.5,
         D_avg=4.2,
     )
     return SimpleNamespace(
@@ -49,8 +56,10 @@ def test_summary_metrics(synthetic_job: SimpleNamespace) -> None:
         synthetic_job,
     )
     assert out["status"] == "optimal"
-    assert out["nev_usd"] == 1_000_000.0
-    assert out["rbc_ratio"] == 1.6
+    assert out["sap_objective_usd"] == 1_000_000.0
+    assert out["statutory_nii_usd"] == 800_000.0
+    assert out["earnings_per_required_capital"] == 0.5
+    assert out["duration_avg_years"] == 4.2
 
 
 def test_top_holdings_delta_orders_by_abs_delta(synthetic_job: SimpleNamespace) -> None:
@@ -62,3 +71,4 @@ def test_top_holdings_delta_orders_by_abs_delta(synthetic_job: SimpleNamespace) 
     assert len(rows) == 2
     assert rows[0]["bond"] == "C"
     assert rows[0]["delta_usd"] == pytest.approx(-2.5)
+    assert rows[0]["book_yield_pct"] == pytest.approx(6.0)
