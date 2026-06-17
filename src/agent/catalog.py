@@ -19,6 +19,8 @@ def execute_select(req: SelectRequest, job: Any) -> dict[str, Any]:
         return _summary_metrics(job)
     if req.query_id == "top_holdings_delta":
         return _top_holdings_delta(job, limit=req.limit)
+    if req.query_id == "recommended_trades":
+        return _recommended_trades(job, limit=req.limit)
     raise ValueError(f"unknown query_id: {req.query_id}")
 
 
@@ -75,3 +77,21 @@ def _top_holdings_delta(job: Any, *, limit: int) -> dict[str, Any]:
             row["book_yield_pct"] = round(float(book_yield[i] * 100), 4)
         rows.append(row)
     return {"query_id": "top_holdings_delta", "rows": rows}
+
+
+def _recommended_trades(job: Any, *, limit: int) -> dict[str, Any]:
+    opt_date = str(job.params.optimization_date.date())
+    if not job.is_optimal:
+        return {
+            "query_id": "recommended_trades",
+            "optimization_date": opt_date,
+            "rows": [],
+            "message": "no optimal holdings; run did not produce trades",
+        }
+    raw = getattr(job.solve, "raw", None) or {}
+    trades: list[dict[str, Any]] = list(raw.get("trades") or [])
+    return {
+        "query_id": "recommended_trades",
+        "optimization_date": opt_date,
+        "rows": trades[:limit],
+    }

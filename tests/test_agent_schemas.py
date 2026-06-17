@@ -44,3 +44,9 @@ def test_agent_turn_select() -> None:
     )
     assert turn.select is not None
     assert turn.select.query_id == "summary_metrics"
+
+
+def test_select_request_recommended_trades() -> None:
+    req = SelectRequest(query_id="recommended_trades", limit=20)
+    assert req.query_id == "recommended_trades"
+    assert req.limit == 20

@@ -43,7 +43,7 @@ class RunRequest(BaseModel):
 class SelectRequest(BaseModel):
     """SELECT — read-only query against the last completed job."""
 
-    query_id: Literal["summary_metrics", "top_holdings_delta"]
+    query_id: Literal["summary_metrics", "top_holdings_delta", "recommended_trades"]
     limit: int = Field(default=10, ge=1, le=100)
 
 

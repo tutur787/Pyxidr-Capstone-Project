@@ -22,12 +22,15 @@ RunRequest (inside run):
 - confirm: boolean — true only if the user clearly confirms execution (e.g. "yes", "confirm", "go ahead")
 
 SelectRequest (inside select):
-- query_id: "summary_metrics" | "top_holdings_delta"
+- query_id: "summary_metrics" | "top_holdings_delta" | "recommended_trades"
 - limit: integer (default 10)
+
+Use "recommended_trades" when the user asks what bonds to buy or sell, trade recommendations, or rebalancing actions for the last run date.
 
 Examples:
 {"intent":"run","run":{"optimization_date":"2025-01-15","budget_usd":500000000,"cost_of_capital":0.15,"confirm":false},"select":null,"user_message":"..."}
 {"intent":"select","run":null,"select":{"query_id":"summary_metrics"},"user_message":"..."}
+{"intent":"select","run":null,"select":{"query_id":"recommended_trades","limit":20},"user_message":"..."}
 {"intent":"unsupported","run":null,"select":null,"user_message":"..."}
 
 Rules:

@@ -72,3 +72,49 @@ def test_top_holdings_delta_orders_by_abs_delta(synthetic_job: SimpleNamespace) 
     assert rows[0]["bond"] == "C"
     assert rows[0]["delta_usd"] == pytest.approx(-2.5)
     assert rows[0]["book_yield_pct"] == pytest.approx(6.0)
+
+
+def test_recommended_trades_returns_solver_trades(synthetic_job: SimpleNamespace) -> None:
+    synthetic_job.solve.raw = {
+        "trades": [
+            {
+                "cusip": "C",
+                "sector": "Financial",
+                "rating": "A",
+                "action": "SELL",
+                "delta_weight_pct": -0.5,
+                "delta_usd": -2_500_000.0,
+                "spread_bps": 300.0,
+                "duration": 4.5,
+            },
+            {
+                "cusip": "A",
+                "sector": "Industrial",
+                "rating": "BBB",
+                "action": "BUY",
+                "delta_weight_pct": 0.3,
+                "delta_usd": 1_500_000.0,
+                "spread_bps": 100.0,
+                "duration": 3.2,
+            },
+        ],
+    }
+    out = execute_select(
+        SelectRequest(query_id="recommended_trades", limit=1),
+        synthetic_job,
+    )
+    assert out["query_id"] == "recommended_trades"
+    assert out["optimization_date"] == "2025-01-15"
+    assert len(out["rows"]) == 1
+    assert out["rows"][0]["action"] == "SELL"
+    assert out["rows"][0]["cusip"] == "C"
+
+
+def test_recommended_trades_empty_when_not_optimal(synthetic_job: SimpleNamespace) -> None:
+    synthetic_job.is_optimal = False
+    out = execute_select(
+        SelectRequest(query_id="recommended_trades"),
+        synthetic_job,
+    )
+    assert out["rows"] == []
+    assert "message" in out

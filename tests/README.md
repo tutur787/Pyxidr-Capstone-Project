@@ -9,8 +9,8 @@ Configuration: [`pytest.ini`](../pytest.ini) sets `pythonpath = src` so imports 
 | File | What it covers |
 |------|----------------|
 | **`conftest.py`** | Prepends `src/` to `sys.path` (redundant with `pytest.ini`, safe fallback). |
-| **`test_agent_schemas.py`** | `RunRequest` / `AgentTurn` JSON round-trip; `validate_run_request()` (e.g. rejects future dates). |
-| **`test_agent_catalog.py`** | `execute_select()` for `summary_metrics` and `top_holdings_delta` using a synthetic job (`SimpleNamespace`, no `fabn_job` import). |
+| **`test_agent_schemas.py`** | `RunRequest` / `AgentTurn` JSON round-trip; `SelectRequest` including `recommended_trades`; `validate_run_request()` (e.g. rejects future dates). |
+| **`test_agent_catalog.py`** | `execute_select()` for `summary_metrics`, `top_holdings_delta`, and `recommended_trades` using a synthetic job (`SimpleNamespace`, no `fabn_job` import). |
 | **`test_qwen_translator.py`** | `_extract_json()` (plain JSON and markdown fences); `_hf_token()` error when env vars are unset. |
 
 ## What is not tested here
@@ -38,7 +38,7 @@ Or with explicit path:
 PYTHONPATH=src pytest tests/ -q
 ```
 
-Expected: **8 tests** passing (schemas, catalog, qwen JSON helpers).
+Expected: **11 tests** passing (schemas, catalog including `recommended_trades`, qwen JSON helpers).
 
 Inside Docker (after `make build`):
 
