@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import runpy
+import threading
 from collections import OrderedDict
 
 import sys
@@ -49,7 +50,8 @@ _FABN_MATURITY = pd.Timestamp("2027-09-06")
 
 # ── Pipeline cache ─────────────────────────────────────────────────────────────
 _pipeline_cache: OrderedDict[str, dict] = OrderedDict()
-_CACHE_MAX = 5
+_CACHE_MAX  = 5
+_cache_lock = threading.Lock()  # guards multi-step OrderedDict mutations under asyncio.to_thread
 
 # ── Applied portfolio state ────────────────────────────────────────────────────
 # Maps CUSIP -> h_opt dollars for trades the user has explicitly applied.
@@ -60,6 +62,21 @@ _applied_portfolio: dict[str, float] = {}
 def apply_trade(cusip: str, h_opt_value: float) -> None:
     """Store a single trade as applied; overrides h_curr for that CUSIP."""
     _applied_portfolio[cusip] = float(h_opt_value)
+
+
+def apply_trades(trades: list[tuple[str, float]]) -> None:
+    """Apply multiple trades atomically — rolls back all writes on any exception."""
+    snapshot = {cusip: _applied_portfolio.get(cusip) for cusip, _ in trades}
+    try:
+        for cusip, h_opt in trades:
+            _applied_portfolio[cusip] = float(h_opt)
+    except Exception:
+        for cusip, prev in snapshot.items():
+            if prev is None:
+                _applied_portfolio.pop(cusip, None)
+            else:
+                _applied_portfolio[cusip] = prev
+        raise
 
 
 def reset_portfolio() -> None:
@@ -83,22 +100,26 @@ def _get_pipeline(date: str) -> dict:
     if ts >= _FABN_MATURITY:
         raise ValueError(f"Date {date} must be before FABN maturity ({_FABN_MATURITY.date()})")
 
-    if date in _pipeline_cache:
-        _pipeline_cache.move_to_end(date)
-        logger.info("Pipeline cache hit for %s", date)
-        return _pipeline_cache[date]
+    with _cache_lock:
+        if date in _pipeline_cache:
+            _pipeline_cache.move_to_end(date)
+            logger.info("Pipeline cache hit for %s", date)
+            return _pipeline_cache[date]
 
     logger.info("Running pipeline for %s (cache miss — BigQuery queries in progress)…", date)
     ns = runpy.run_path(PIPELINE_PATH, init_globals={"optimization_date": ts})
     pipeline = ns["pipeline"]
 
-    _pipeline_cache[date] = pipeline
-    _pipeline_cache.move_to_end(date)
-    if len(_pipeline_cache) > _CACHE_MAX:
-        evicted = _pipeline_cache.popitem(last=False)
-        logger.info("Evicted pipeline cache entry: %s", evicted[0])
-
-    return pipeline
+    with _cache_lock:
+        if date not in _pipeline_cache:  # double-check: another thread may have populated it
+            _pipeline_cache[date] = pipeline
+            _pipeline_cache.move_to_end(date)
+            if len(_pipeline_cache) > _CACHE_MAX:
+                evicted = _pipeline_cache.popitem(last=False)
+                logger.info("Evicted pipeline cache entry: %s", evicted[0])
+        else:
+            _pipeline_cache.move_to_end(date)
+        return _pipeline_cache[date]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/layout/Header'
 import TabBar from './components/layout/TabBar'
 import PortfolioKPI from './components/panels/PortfolioKPI'
@@ -34,6 +34,17 @@ export default function App() {
 
   // Cumulative cost of trades the user actually applied (not the optimizer's full suggestion)
   const [cumulativeAppliedTxnCost, setCumulativeAppliedTxnCost] = useState(0)
+
+  // Ref to latest txn_cost — lets apply callbacks read the freshest value without
+  // capturing optimizerResult in their dep arrays (which causes stale-closure bugs
+  // when two apply calls fire concurrently).
+  const latestTxnCostRef = useRef(0)
+  useEffect(() => { latestTxnCostRef.current = optimizerResult?.txn_cost ?? 0 }, [optimizerResult])
+
+  // Global apply lock — prevents concurrent applyTrade / applyAllTrades calls from
+  // double-counting cost deltas and from sending overlapping requests to the backend.
+  const applyBusyRef = useRef(false)
+  const [applyBusy, setApplyBusy] = useState(false)
 
   useEffect(() => {
     fetch('/api/fabns')
@@ -96,23 +107,62 @@ export default function App() {
   }, [])
 
   const applyTrade = useCallback(async (trade: Trade) => {
-    const costBefore = optimizerResult?.txn_cost ?? 0
-    await fetch('/api/portfolio/apply-trade', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cusip: trade.cusip, h_opt: trade.h_opt }),
-    })
-    setAppliedTrades(prev => [...prev, {
-      cusip:     trade.cusip,
-      action:    trade.action,
-      delta_usd: trade.delta_usd,
-      h_opt:     trade.h_opt,
-      appliedAt: date,
-    }])
-    const newResult = await runOptimizer(date, hyperParams)
-    const costAfter = newResult?.txn_cost ?? 0
-    setCumulativeAppliedTxnCost(prev => prev + Math.max(0, costBefore - costAfter))
-  }, [date, hyperParams, runOptimizer, optimizerResult])
+    if (applyBusyRef.current) return
+    applyBusyRef.current = true
+    setApplyBusy(true)
+    const costBefore = latestTxnCostRef.current
+    try {
+      const res = await fetch('/api/portfolio/apply-trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cusip: trade.cusip, h_opt: trade.h_opt }),
+      })
+      if (!res.ok) { setOptimizerError(`Apply failed (${res.status})`); return }
+      setAppliedTrades(prev => [...prev, {
+        cusip:     trade.cusip,
+        action:    trade.action,
+        delta_usd: trade.delta_usd,
+        h_opt:     trade.h_opt,
+        appliedAt: date,
+      }])
+      const newResult = await runOptimizer(date, hyperParams)
+      const costAfter = newResult?.txn_cost ?? 0
+      setCumulativeAppliedTxnCost(prev => prev + Math.max(0, costBefore - costAfter))
+    } finally {
+      applyBusyRef.current = false
+      setApplyBusy(false)
+    }
+  }, [date, hyperParams, runOptimizer])
+
+  // Applies sells + buy atomically — buys + sells in one shot so the $500M budget
+  // constraint is never violated. Also used for pre-funded buys (sells=[]).
+  const applyAllTrades = useCallback(async (trades: Trade[]) => {
+    if (trades.length === 0 || applyBusyRef.current) return
+    applyBusyRef.current = true
+    setApplyBusy(true)
+    const costBefore = latestTxnCostRef.current
+    try {
+      const res = await fetch('/api/portfolio/apply-trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trades: trades.map(t => ({ cusip: t.cusip, h_opt: t.h_opt })) }),
+      })
+      if (!res.ok) { setOptimizerError(`Apply failed (${res.status})`); return }
+      setAppliedTrades(prev => [...prev, ...trades.map(t => ({
+        cusip:     t.cusip,
+        action:    t.action,
+        delta_usd: t.delta_usd,
+        h_opt:     t.h_opt,
+        appliedAt: date,
+      }))])
+      const newResult = await runOptimizer(date, hyperParams)
+      const costAfter = newResult?.txn_cost ?? 0
+      setCumulativeAppliedTxnCost(prev => prev + Math.max(0, costBefore - costAfter))
+    } finally {
+      applyBusyRef.current = false
+      setApplyBusy(false)
+    }
+  }, [date, hyperParams, runOptimizer])
 
   const resetPortfolio = useCallback(async () => {
     await fetch('/api/portfolio/reset', { method: 'POST' })
@@ -213,7 +263,9 @@ export default function App() {
           loading={optimizerLoading}
           appliedTrades={appliedTrades}
           onApplyTrade={applyTrade}
+          onApplyAllTrades={applyAllTrades}
           onResetPortfolio={resetPortfolio}
+          applyInProgress={applyBusy}
         />
       )}
       {activeModal === 'strategy-tracking' && (
