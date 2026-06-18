@@ -134,10 +134,10 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
           </div>
           {isOptimal && (result?.cashflows ?? []).length > 0 ? (() => {
             const cfData = result!.cashflows.map(row => ({
-              period:   row.period,
-              fabn_cf:  row.fabn_cf,         // positive obligation
-              asset_cf: row.asset_cf,
-              surplus:  row.surplus,          // asset_cf − fabn_cf (can be negative)
+              period:      row.period,
+              fabn_cf:     row.fabn_cf,
+              asset_cf:    row.asset_cf,
+              facility_bal: row.facility_bal,   // optimizer's running cumulative balance
             }))
             const fmtM = (v: number) => {
               const abs = Math.abs(v)
@@ -157,15 +157,15 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
                       contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
                       formatter={(value: number, name: string) => [
                         fmtM(value),
-                        name === 'fabn_cf'  ? 'FABN obligation' :
-                        name === 'asset_cf' ? 'Asset receipts'  : 'Net balance',
+                        name === 'fabn_cf'       ? 'FABN obligation' :
+                        name === 'asset_cf'      ? 'Asset receipts'  : 'Total balance',
                       ]}
                     />
                     <Bar dataKey="fabn_cf"  fill="#ef4444" opacity={0.75} maxBarSize={22} radius={[3,3,0,0]} />
                     <Bar dataKey="asset_cf" fill="#10b981" opacity={0.80} maxBarSize={22} radius={[3,3,0,0]} />
-                    <Bar dataKey="surplus"  maxBarSize={22} radius={[3,3,0,0]}>
+                    <Bar dataKey="facility_bal" maxBarSize={22} radius={[3,3,0,0]}>
                       {cfData.map((row, idx) => (
-                        <Cell key={idx} fill={row.surplus >= 0 ? '#3b82f6' : '#f97316'} opacity={0.80} />
+                        <Cell key={idx} fill={row.facility_bal >= 0 ? '#3b82f6' : '#f97316'} opacity={0.80} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -173,8 +173,8 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
                 <div className="flex items-center gap-5 justify-center mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-red-500/75" />FABN obligation</span>
                   <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-500/80" />Asset receipts</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-blue-500/80" />Net balance (surplus)</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-orange-500/80" />Net balance (deficit)</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-blue-500/80" />Total balance (surplus)</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-orange-500/80" />Total balance (deficit)</span>
                 </div>
               </div>
             )
