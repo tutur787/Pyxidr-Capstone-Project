@@ -51,6 +51,25 @@ _FABN_MATURITY = pd.Timestamp("2027-09-06")
 _pipeline_cache: OrderedDict[str, dict] = OrderedDict()
 _CACHE_MAX = 5
 
+# ── Applied portfolio state ────────────────────────────────────────────────────
+# Maps CUSIP -> h_opt dollars for trades the user has explicitly applied.
+# Persists across dates; cleared only by reset_portfolio().
+_applied_portfolio: dict[str, float] = {}
+
+
+def apply_trade(cusip: str, h_opt_value: float) -> None:
+    """Store a single trade as applied; overrides h_curr for that CUSIP."""
+    _applied_portfolio[cusip] = float(h_opt_value)
+
+
+def reset_portfolio() -> None:
+    """Clear all applied trades, reverting to the equal-weight baseline."""
+    _applied_portfolio.clear()
+
+
+def get_applied_count() -> int:
+    return len(_applied_portfolio)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Pipeline loading
@@ -118,6 +137,14 @@ def _solve(
     from gurobipy import GRB
 
     pipeline = _get_pipeline(date)
+
+    # ── 1. Inject applied-trade overrides into h_curr ─────────────────────
+    if _applied_portfolio:
+        h_curr_raw = pipeline["h_curr"].copy()
+        for i, c in enumerate(pipeline["CUSIPS"]):
+            if c in _applied_portfolio:
+                h_curr_raw[i] = _applied_portfolio[c]
+        pipeline = {**pipeline, "h_curr": h_curr_raw}
 
     # ── 1A. Unpack pipeline ────────────────────────────────────────────────
     N           = pipeline["N"]
@@ -335,7 +362,10 @@ def _solve(
         })
     alloc_list.sort(key=lambda x: x["h_opt"], reverse=True)
 
-    # Trades: top 15 BUYs + top 15 SELLs, both sorted by magnitude
+    # Trades: top 15 BUYs + top 15 SELLs, ranked by SAP contribution rate per dollar.
+    # sap_score = (book_yield_i - r_FABN) - lambda_cap * theta_i  [per $ invested]
+    # BUYs: highest sap_score first (best NEV additions).
+    # SELLs: lowest sap_score first (worst NEV contributors = best to exit).
     buys_raw:  list[dict] = []
     sells_raw: list[dict] = []
     for i in range(N):
@@ -345,6 +375,7 @@ def _solve(
         cusip  = CUSIPS[i]
         sector = str(fixed_df.loc[cusip, "sector"]).strip() if cusip in fixed_df.index else ""
         rating = str(fixed_df.loc[cusip, "rating_sp"]).strip() if cusip in fixed_df.index else ""
+        sap_rate = float(nii_rate[i] - lambda_cap * theta[i])   # net SAP $ per $ held
         entry = {
             "cusip":            cusip,
             "sector":           sector,
@@ -352,16 +383,18 @@ def _solve(
             "action":           "BUY" if delta_usd > 0 else "SELL",
             "delta_weight_pct": round(delta_usd / H * 100, 3),
             "delta_usd":        round(delta_usd, 2),
+            "h_opt":            round(float(h_opt[i]), 2),
             "spread_bps":       round(float(spread[i] * 1e4), 2),
             "duration":         round(float(durs[i]), 4),
+            "sap_score_bps":    round(sap_rate * 1e4, 2),  # bps of net SAP per $ invested
         }
         if delta_usd > 0:
             buys_raw.append(entry)
         else:
             sells_raw.append(entry)
 
-    buys_raw.sort(key=lambda x: x["delta_usd"], reverse=True)    # largest buy first
-    sells_raw.sort(key=lambda x: x["delta_usd"])                  # largest sell first
+    buys_raw.sort(key=lambda x: x["sap_score_bps"], reverse=True)  # best NEV first
+    sells_raw.sort(key=lambda x: x["sap_score_bps"])               # worst NEV first (best to exit)
     trades = buys_raw[:15] + sells_raw[:15]
 
     # Cashflows (quarters where FABN CF > 0)

@@ -20,6 +20,10 @@ export function useDate(initial = '2025-01-15') {
     setDate(prev => clamp(addDays(prev, delta)))
   }, [])
 
+  const jumpToDate = useCallback((iso: string) => {
+    setDate(clamp(iso))
+  }, [])
+
   const isAtMin = date <= DATE_MIN
   const isAtMax = date >= DATE_MAX
 
@@ -28,5 +32,5 @@ export function useDate(initial = '2025-01-15') {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
-  return { date, advanceDate, isAtMin, isAtMax, formatDisplay }
+  return { date, advanceDate, jumpToDate, isAtMin, isAtMax, formatDisplay }
 }

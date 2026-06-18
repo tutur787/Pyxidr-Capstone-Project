@@ -71,8 +71,31 @@ export interface Trade {
   action:           'BUY' | 'SELL'
   delta_weight_pct: number
   delta_usd:        number
+  h_opt:            number
   spread_bps:       number
   duration:         number
+  sap_score_bps:    number  // net SAP contribution rate in bps per $ (NII − capital cost)
+}
+
+export interface AppliedTrade {
+  cusip:     string
+  action:    'BUY' | 'SELL'
+  delta_usd: number
+  h_opt:     number
+  appliedAt: string  // YYYY-MM-DD of the optimization date when applied
+}
+
+export interface HistoryEntry {
+  date:             string   // YYYY-MM-DD
+  sap_opt:          number   // SAP objective (optimizer)
+  sap_static:       number   // SAP objective (equal-weight benchmark)
+  alpha:            number   // sap_opt - sap_static
+  yield_pct:        number
+  duration:         number
+  duration_gap:     number
+  spread_bps:       number
+  n_bonds_selected: number
+  txn_cost:         number   // turnover/trading cost for this rebalance
 }
 
 export interface ConstraintResult {

@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import HyperparamSidebar from '../sidebar/HyperparamSidebar'
 import type { HyperParams, Fabn } from '../../types'
+import { DATE_MIN, DATE_MAX } from '../../data/stubs'
 
 interface Props {
   date: string
   formattedDate: string
   onAdvance: (delta: number) => void
+  onJumpToDate: (iso: string) => void
   isAtMin: boolean
   isAtMax: boolean
   hyperParams: HyperParams
@@ -16,8 +18,112 @@ interface Props {
   onApply: () => void
 }
 
+// ── Lightweight inline calendar popover ───────────────────────────────────────
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
+function CalendarPopover({
+  date,
+  onSelect,
+}: {
+  date: string
+  onSelect: (iso: string) => void
+}) {
+  const [calMonth, setCalMonth] = useState(date.slice(0, 7)) // YYYY-MM
+
+  // Keep calendar in sync when the date is changed externally via arrows
+  useEffect(() => { setCalMonth(date.slice(0, 7)) }, [date])
+
+  const [yearStr, monthStr] = calMonth.split('-')
+  const year  = Number(yearStr)
+  const month = Number(monthStr) // 1-indexed
+
+  function shiftMonth(delta: number) {
+    const d = new Date(year, month - 1 + delta, 1)
+    setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  const monthLabel = new Date(year, month - 1).toLocaleDateString('en-US', {
+    month: 'long', year: 'numeric',
+  })
+
+  const firstWeekday = new Date(year, month - 1, 1).getDay()
+  const daysInMonth  = new Date(year, month, 0).getDate()
+
+  // Can we navigate to prev/next month? Only if any day there is within bounds.
+  const prevMonthFirstISO = `${new Date(year, month - 2, 1).getFullYear()}-${String(new Date(year, month - 2, 1).getMonth() + 1).padStart(2, '0')}-01`
+  const nextMonthLastISO  = (() => {
+    const d = new Date(year, month + 1, 0) // last day of next month
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+
+  return (
+    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-3 z-[200] w-72">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => shiftMonth(-1)}
+          disabled={prevMonthFirstISO < DATE_MIN.slice(0, 8) + '01' && `${year}-${String(month).padStart(2,'0')}` <= DATE_MIN.slice(0, 7)}
+          className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded hover:bg-gray-700 transition-colors text-sm font-bold"
+        >
+          ←
+        </button>
+        <span className="text-white text-sm font-mono font-medium">{monthLabel}</span>
+        <button
+          onClick={() => shiftMonth(1)}
+          disabled={nextMonthLastISO > DATE_MAX}
+          className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded hover:bg-gray-700 transition-colors text-sm font-bold"
+        >
+          →
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_LABELS.map(d => (
+          <div key={d} className="text-gray-600 text-xs text-center py-0.5">{d}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {/* Empty offset cells */}
+        {Array.from({ length: firstWeekday }).map((_, i) => (
+          <div key={`empty-${i}`} />
+        ))}
+
+        {/* Day cells */}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1
+          const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const isSelected = iso === date
+          const isDisabled = iso < DATE_MIN || iso > DATE_MAX
+          return (
+            <button
+              key={day}
+              disabled={isDisabled}
+              onClick={() => onSelect(iso)}
+              className={`text-xs rounded py-1.5 w-full text-center transition-colors
+                ${isSelected
+                  ? 'bg-amber-500 text-gray-900 font-bold'
+                  : isDisabled
+                    ? 'text-gray-700 cursor-not-allowed'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+
+      <p className="text-gray-600 text-xs text-center mt-3">
+        Range: {DATE_MIN} → {DATE_MAX}
+      </p>
+    </div>
+  )
+}
+
 export default function Header({
-  date, formattedDate, onAdvance, isAtMin, isAtMax,
+  date, formattedDate, onAdvance, onJumpToDate, isAtMin, isAtMax,
   hyperParams, onHyperParamsChange,
   fabns, selectedFabns, onFabnChange,
   onApply,
@@ -25,8 +131,9 @@ export default function Header({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [fabnOpen, setFabnOpen] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
 
-  // Click-outside for FABN dropdown — avoids the z-index stacking-context bug
+  // Click-outside for FABN dropdown
   const fabnRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!fabnOpen) return
@@ -52,12 +159,24 @@ export default function Header({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [profileOpen])
 
+  // Click-outside for calendar
+  const calendarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showCalendar) return
+    function handleClick(e: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
+        setShowCalendar(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showCalendar])
+
   function toggleFabn(f: Fabn) {
     const already = selectedFabns.some(s => s.cusip === f.cusip)
     onFabnChange(already ? selectedFabns.filter(s => s.cusip !== f.cusip) : [...selectedFabns, f])
   }
 
-  // Header label
   const fabnLabel =
     selectedFabns.length === 0 ? 'Select FABN…' :
     selectedFabns.length === 1 ? `FABN · ${selectedFabns[0].cusip}` :
@@ -85,7 +204,7 @@ export default function Header({
             <span className="block w-5 h-0.5 bg-gray-400 group-hover:bg-amber-400 transition-colors" />
           </button>
 
-          {/* FABN selector — ref-based click-outside, no backdrop */}
+          {/* FABN selector */}
           <div className="relative" ref={fabnRef}>
             <button
               onClick={() => setFabnOpen(o => !o)}
@@ -124,7 +243,6 @@ export default function Header({
                       className={`w-full text-left px-4 py-2.5 hover:bg-gray-700 transition-colors flex items-start gap-3
                         ${checked ? 'bg-amber-500/10' : ''}`}
                     >
-                      {/* Checkbox indicator */}
                       <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center
                         ${checked ? 'bg-amber-500 border-amber-500' : 'border-gray-600'}`}>
                         {checked && <span className="text-gray-900 text-xs font-bold leading-none">✓</span>}
@@ -151,26 +269,44 @@ export default function Header({
           </div>
         </div>
 
-        {/* Center: date navigator */}
-        <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-2 border border-gray-700">
-          <button
-            onClick={() => onAdvance(-1)}
-            disabled={isAtMin}
-            className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
-          >
-            ←
-          </button>
-          <div className="flex items-center gap-2 min-w-[140px] justify-center">
-            <span className="text-amber-400 text-xs">📅</span>
-            <span className="text-white font-mono text-sm font-medium">{formattedDate}</span>
+        {/* Center: date navigator + calendar popover */}
+        <div className="relative" ref={calendarRef}>
+          <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-2 border border-gray-700">
+            {/* One-day back */}
+            <button
+              onClick={() => onAdvance(-1)}
+              disabled={isAtMin}
+              className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
+            >
+              ←
+            </button>
+
+            {/* Calendar toggle — clicking the emoji or date text opens the picker */}
+            <button
+              onClick={() => setShowCalendar(v => !v)}
+              className="flex items-center gap-2 min-w-[140px] justify-center rounded-lg px-1 py-0.5 hover:bg-gray-700 transition-colors"
+              title="Click to open calendar"
+            >
+              <span className={`text-xs transition-colors ${showCalendar ? 'text-amber-300' : 'text-amber-400'}`}>📅</span>
+              <span className="text-white font-mono text-sm font-medium">{formattedDate}</span>
+            </button>
+
+            {/* One-day forward */}
+            <button
+              onClick={() => onAdvance(1)}
+              disabled={isAtMax}
+              className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
+            >
+              →
+            </button>
           </div>
-          <button
-            onClick={() => onAdvance(1)}
-            disabled={isAtMax}
-            className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
-          >
-            →
-          </button>
+
+          {showCalendar && (
+            <CalendarPopover
+              date={date}
+              onSelect={iso => { onJumpToDate(iso); setShowCalendar(false) }}
+            />
+          )}
         </div>
 
         {/* Right: profile */}
