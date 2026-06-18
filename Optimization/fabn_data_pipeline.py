@@ -490,6 +490,7 @@ pipeline = {
     # scalar params
     "H":              H,
     "r_FABN":         r_FABN,
+    "r_float":        float(rf_interp(0.25)),   # 3M Treasury rate — SOFR proxy for swap pricing
     "D_FABN":         D_FABN,
     "C_curr":         C_curr,
     "C_min":          C_min,

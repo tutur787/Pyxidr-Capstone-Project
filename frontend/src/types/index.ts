@@ -143,6 +143,14 @@ export interface StaticComparison {
   n_bonds:      number
 }
 
+export interface SwapAllocation {
+  tenor_years: number
+  notional:    number   // $
+  fixed_rate:  number   // e.g. 0.0450
+  net_income:  number   // $ per year
+  dur_contrib: number   // years (swap contribution to portfolio duration)
+}
+
 export interface OptimizerResult {
   status:           'optimal' | 'infeasible' | 'error'
   date:             string
@@ -169,5 +177,6 @@ export interface OptimizerResult {
   imr_total_gain:   number
   imr_contributions: ImrContribution[]
   static_comparison: StaticComparison
+  swap_allocations:  SwapAllocation[]
   error?:           string
 }

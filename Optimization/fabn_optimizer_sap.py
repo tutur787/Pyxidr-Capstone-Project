@@ -58,6 +58,8 @@ pipeline = _ns["pipeline"]
 import gurobipy as gp
 from gurobipy import GRB
 
+import fabn_finance as ff
+
 # =============================================================================
 # Section 1A — Unpack Pipeline
 # =============================================================================
@@ -112,6 +114,26 @@ print(f"NII rate   : {nii_rate.min()*100:.2f}% – {nii_rate.max()*100:.2f}%  "
       f"(mean {nii_rate.mean()*100:.2f}%)")
 
 # =============================================================================
+# Section 1C — Swap Universe Parameters
+# =============================================================================
+K          = 3
+swap_tenor = np.array([1.0, 2.0, 3.0])                              # years
+c_swap     = np.array([0.043, 0.044, 0.045])                        # receive-fixed rates
+r_float    = float(pipeline.get("r_float", 0.0435))                 # 3M Treasury / SOFR proxy
+swp_dur    = np.array([ff.swap_fixed_leg_duration(swap_tenor[k], c_swap[k], r_float)
+                       for k in range(K)])
+mu_swap    = 0.002                                                   # C3 RBC factor per $1 notional
+v_max_frac = 0.20                                                    # max 20% of H in swaps
+
+# Pre-compute swap quarterly settlement schedules (per $1 notional)
+swap_cf_sched = np.array([
+    ff.swap_quarterly_cashflows(c_swap[k], r_float, swap_tenor[k], Q)
+    for k in range(K)
+])  # shape: (K, Q)
+
+print(f"Swap overlay: K={K} tenors={list(swap_tenor)} max_notional={v_max_frac*H/1e6:.0f}M")
+
+# =============================================================================
 # Section 2 — Gurobi Optimization Model
 # =============================================================================
 model = gp.Model("FABN_SAP_Optimizer")
@@ -127,6 +149,9 @@ tc_plus  = model.addVars(N, lb=0.0, name="tc_plus")
 tc_minus = model.addVars(N, lb=0.0, name="tc_minus")
 B        = model.addVars(Q, lb=0.0, name="B")
 s_net    = model.addVars(Q, lb=0.0, name="s_net")
+
+# 2B-swap. Swap notional variables (one per swap tenor)
+v = model.addVars(K, lb=0.0, name="v")
 
 # Discount factors at r_FABN
 t_quarters = [dt_q * (q + 1) for q in range(Q)]
@@ -151,16 +176,20 @@ turnover_cost  = gp.quicksum(tau[i] * (tc_plus[i] + tc_minus[i]) for i in range(
 liq_penalty    = eta * gp.quicksum(df_q[q] * s_net[q]       for q in range(Q))
 savings_income = r_save * dt_q * gp.quicksum(B[q]           for q in range(Q - 1))
 
-SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income
+swap_NII  = gp.quicksum((c_swap[k] - r_float) * v[k] for k in range(K))
+swap_RBC  = lambda_cap * mu_swap * gp.quicksum(v[k] for k in range(K))
+SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income + swap_NII - swap_RBC
 model.setObjective(SAP, GRB.MAXIMIZE)
 
 # 2D. Constraints
 # Budget
 model.addConstr(gp.quicksum(h[i] for i in range(N)) == H, name="budget")
 
-# Duration alignment band
+# Duration alignment band (bonds + swaps jointly)
 model.addConstr(
-    gp.quicksum(durs[i] * h[i] for i in range(N)) - D_FABN * H == d_pos - d_neg,
+    gp.quicksum(durs[i] * h[i] for i in range(N))
+    + gp.quicksum(swp_dur[k] * v[k] for k in range(K))
+    - D_FABN * H == d_pos - d_neg,
     name="dur_gap_decomp",
 )
 model.addConstr(d_pos <= eps_D * H, name="dur_upper")
@@ -170,15 +199,16 @@ model.addConstr(d_neg <= eps_D * H, name="dur_lower")
 for i in range(N):
     model.addConstr(h[i] - h_curr[i] == tc_plus[i] - tc_minus[i], name=f"tc_decomp_{i}")
 
-# Lending-facility balance dynamics (direct qtr_bond_cf; no aug_bond_cf needed)
+# Lending-facility balance dynamics (bonds + swap quarterly settlements)
 for q in range(Q):
-    CF_A_q = gp.quicksum(qtr_bond_cf[q, i] * h[i] for i in range(N))
-    CF_L_q = float(qtr_fabn_cf[q])
+    CF_A_q    = gp.quicksum(qtr_bond_cf[q, i] * h[i] for i in range(N))
+    swap_cf_q = gp.quicksum(swap_cf_sched[k, q] * v[k] for k in range(K))
+    CF_L_q    = float(qtr_fabn_cf[q])
     if q == 0:
-        model.addConstr(B[q] - s_net[q] == CF_A_q - CF_L_q, name=f"facility_{q}")
+        model.addConstr(B[q] - s_net[q] == CF_A_q + swap_cf_q - CF_L_q, name=f"facility_{q}")
     else:
         model.addConstr(
-            B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q - CF_L_q,
+            B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q + swap_cf_q - CF_L_q,
             name=f"facility_{q}",
         )
 
@@ -198,6 +228,12 @@ for issuer, bidx in issuer_groups.items():
     model.addConstr(
         gp.quicksum(h[i] for i in bidx) <= delta * H, name=f"conc_{issuer}"
     )
+
+# Swap notional cap: total swap notional ≤ v_max_frac * H
+model.addConstr(
+    gp.quicksum(v[k] for k in range(K)) <= v_max_frac * H,
+    name="swap_cap",
+)
 
 # 2E. Solve
 model.optimize()
@@ -238,6 +274,36 @@ if model.Status == GRB.OPTIMAL:
     print(f"  Statutory earnings / req. capital : {earn_per_cap:.4f}")
     print(f"  Portfolio D_avg          : {D_avg:.4f} yrs  (target {D_FABN:.4f} +/- {eps_D})")
     print("=" * 60)
+
+    # Shadow prices (dual values of binding constraints)
+    def _safe_pi(cname):
+        try:
+            return model.getConstrByName(cname).Pi
+        except Exception:
+            return None
+
+    print("\n── Shadow prices ────────────────────────────────────────")
+    for cname, label in [
+        ("budget",             "Budget constraint"),
+        ("dur_upper",          "Duration upper band"),
+        ("dur_lower",          "Duration lower band"),
+        ("pv_shortfall_limit", "PV shortfall cap"),
+        ("swap_cap",           "Swap notional cap"),
+    ]:
+        pi = _safe_pi(cname)
+        print(f"  {label:35s}: {pi:+.4f}" if pi is not None else f"  {label:35s}: n/a")
+
+    # Optimal swap overlay
+    v_opt = np.array([v[k].X for k in range(K)])
+    swap_net_income = float(sum((c_swap[k] - r_float) * v_opt[k] for k in range(K)))
+    print("\n── Optimal swap overlay ─────────────────────────────────")
+    for k in range(K):
+        print(f"  {swap_tenor[k]:.0f}yr  notional=${v_opt[k]/1e6:.2f}M  "
+              f"rate={c_swap[k]:.2%}  dur_contrib={swp_dur[k]*v_opt[k]/H:.4f}yr  "
+              f"net_income=${((c_swap[k]-r_float)*v_opt[k]):,.0f}")
+    print(f"  Total swap notional: ${v_opt.sum()/1e6:.2f}M  |  "
+          f"Net income: ${swap_net_income:,.0f}  |  "
+          f"Duration contribution: {float(sum(swp_dur[k]*v_opt[k] for k in range(K)))/H:.4f}yr")
 
     pv_short = float(sum(df_q[q] * s_net_vals[q] for q in range(Q)))
     constraints_df = pd.DataFrame({

@@ -196,11 +196,13 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
     : 'bg-gray-800 border-gray-700 text-gray-500'
 
-  const regulatoryCapital = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
-  const cumulativeTxnCost = history.reduce((s, h) => s + h.txn_cost, 0)
-  const marketValue       = isOptimal && optimizerResult
+  const regulatoryCapital  = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
+  const cumulativeTxnCost  = history.reduce((s, h) => s + h.txn_cost, 0)
+  const marketValue        = isOptimal && optimizerResult
     ? optimizerResult.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
     : null
+  const swapAllocs         = optimizerResult?.swap_allocations ?? []
+  const totalSwapNotional  = swapAllocs.reduce((s, a) => s + a.notional, 0)
 
   // Modal config derived from expandedKPI
   type ModalCfg = { dataKey: keyof HistoryEntry; formatter: (v: number) => string; annotation?: string }
@@ -273,6 +275,15 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
                 expanded={expandedKPI === 'Trading Cost'}
                 title="Cumulative bid-ask spread cost across all rebalances this session. Click to see evolution."
               />
+              {totalSwapNotional > 1_000 && (
+                <Metric
+                  label="Swap Notional"
+                  value={formatValue(totalSwapNotional)}
+                  valueColor="text-purple-400"
+                  sublabel={`${swapAllocs.filter(a => a.notional > 1_000).length} receive-fixed`}
+                  title="Total notional of receive-fixed interest-rate swaps in the optimal overlay. See Strategy Tracking for details."
+                />
+              )}
             </div>
             <div className="border-t border-gray-800" />
           </>

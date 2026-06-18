@@ -117,8 +117,15 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
   // ── Shadow prices ─────────────────────────────────────────────────────────
   const shadowPrices = result?.shadow_prices ?? []
 
+  // ── Swap overlay ──────────────────────────────────────────────────────────
+  const swapAllocs      = result?.swap_allocations ?? []
+  const totalSwapNotional = swapAllocs.reduce((s, a) => s + a.notional, 0)
+  const totalSwapIncome   = swapAllocs.reduce((s, a) => s + a.net_income, 0)
+  const totalSwapDur      = swapAllocs.reduce((s, a) => s + a.dur_contrib, 0)
+  const hasSwaps          = totalSwapNotional > 1_000
+
   return (
-    <Modal title="Strategy Tracking" subtitle="Performance evolution · SAP vs benchmark · IMR · constraint analysis" onClose={onClose}>
+    <Modal title="Strategy Tracking" subtitle="Performance evolution · SAP vs benchmark · IMR · constraint analysis · swap overlay" onClose={onClose}>
       <div className="space-y-8">
 
         {/* ── Section 0: Performance Evolution ──────────────────────────── */}
@@ -481,6 +488,73 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   </div>
                 )
               })()}
+            </>
+          )}
+        </section>
+
+        {/* ── Section 2b: Swap Overlay ──────────────────────────────────── */}
+        <section>
+          <div className="flex items-center gap-3 mb-1">
+            <h3 className="text-white font-medium text-sm">Swap Overlay</h3>
+            <span className="text-gray-600 text-xs">Receive-fixed interest-rate swaps</span>
+            {isOptimal && hasSwaps && (
+              <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                {fmt$(totalSwapNotional)} notional
+              </span>
+            )}
+          </div>
+          <p className="text-gray-600 text-xs mb-3">
+            Swaps adjust duration at a fraction of bond bid-ask cost. Decision variables{' '}
+            <span className="font-mono text-gray-400">v[k]</span> enter the SAP LP jointly
+            with bond holdings <span className="font-mono text-gray-400">h[i]</span>.
+          </p>
+
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see swap overlay" />
+          ) : !hasSwaps ? (
+            <EmptyState label="No swap overlay active — optimizer chose 0 notional for all tenors" />
+          ) : (
+            <>
+              {/* Summary KPI strip */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[
+                  { label: 'Total Notional', value: fmt$(totalSwapNotional), color: 'text-purple-400' },
+                  { label: 'Net Income',     value: `+${fmt$(totalSwapIncome)}`, color: 'text-emerald-400' },
+                  { label: 'Dur. Contribution', value: `${totalSwapDur.toFixed(4)} yr`, color: 'text-blue-400' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
+                    <p className="text-gray-500 text-xs mb-1">{label}</p>
+                    <p className={`font-mono font-semibold text-sm ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per-tenor allocation table */}
+              <div className="overflow-x-auto rounded-xl border border-gray-700">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-800/80 border-b border-gray-700">
+                      {['Tenor', 'Notional', 'Fixed Rate', 'Float Rate', 'Net Income ($/yr)', 'Dur. Contrib. (yr)'].map(h => (
+                        <th key={h} className="px-4 py-2 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {swapAllocs.map((s, i) => (
+                      <tr key={i} className={`border-b border-gray-800/60 hover:bg-gray-800/30 ${s.notional > 1_000 ? '' : 'opacity-40'}`}>
+                        <td className="px-4 py-2.5 font-mono text-purple-400 font-semibold">{s.tenor_years.toFixed(0)}yr</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-300">{fmt$(s.notional)}</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-300">{(s.fixed_rate * 100).toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-500">—</td>
+                        <td className={`px-4 py-2.5 font-mono font-semibold ${s.net_income >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {s.net_income >= 0 ? '+' : ''}{fmt$(s.net_income)}
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-blue-400">{s.dur_contrib.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </section>

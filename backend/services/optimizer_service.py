@@ -189,6 +189,22 @@ def _solve(
     # Net NII rate: book_yield - r_FABN
     nii_rate = book_yield - r_FABN
 
+    # ── 1C. Swap universe parameters ──────────────────────────────────────
+    K          = 3
+    swap_tenor = np.array([1.0, 2.0, 3.0])                          # years
+    c_swap     = np.array([0.043, 0.044, 0.045])                     # receive-fixed rates
+    r_float    = float(pipeline.get("r_float", 0.0435))              # 3M Treasury / SOFR proxy
+    swp_dur    = np.array([ff.swap_fixed_leg_duration(swap_tenor[k], c_swap[k], r_float)
+                           for k in range(K)])
+    mu_swap    = 0.002                                               # C3 RBC factor per $1 notional
+    v_max_frac = 0.20                                                # max 20% of H in swaps
+
+    # Pre-compute swap quarterly settlement schedules (per $1 notional)
+    swap_cf_sched = np.array([
+        ff.swap_quarterly_cashflows(c_swap[k], r_float, swap_tenor[k], Q)
+        for k in range(K)
+    ])  # shape: (K, Q)
+
     # ── 2. Build Gurobi model ──────────────────────────────────────────────
     model = gp.Model("FABN_SAP_Optimizer")
     model.Params.LogToConsole = 0
@@ -204,6 +220,9 @@ def _solve(
     tc_minus = model.addVars(N, lb=0.0, name="tc_minus")
     B        = model.addVars(Q, lb=0.0, name="B")
     s_net    = model.addVars(Q, lb=0.0, name="s_net")
+
+    # 2B-swap. Swap notional variables
+    v = model.addVars(K, lb=0.0, name="v")
 
     # Discount factors at r_FABN
     t_quarters = [dt_q * (q + 1) for q in range(Q)]
@@ -226,16 +245,20 @@ def _solve(
     liq_penalty    = eta * gp.quicksum(df_q[q] * s_net[q]       for q in range(Q))
     savings_income = r_save * dt_q * gp.quicksum(B[q]           for q in range(Q - 1))
 
-    SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income
+    swap_NII  = gp.quicksum((c_swap[k] - r_float) * v[k] for k in range(K))
+    swap_RBC  = lambda_cap * mu_swap * gp.quicksum(v[k] for k in range(K))
+    SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income + swap_NII - swap_RBC
     model.setObjective(SAP, GRB.MAXIMIZE)
 
     # 2E. Constraints
     # Budget
     model.addConstr(gp.quicksum(h[i] for i in range(N)) == H, name="budget")
 
-    # Duration alignment band
+    # Duration alignment band (bonds + swaps jointly)
     model.addConstr(
-        gp.quicksum(durs[i] * h[i] for i in range(N)) - D_FABN * H == d_pos - d_neg,
+        gp.quicksum(durs[i] * h[i] for i in range(N))
+        + gp.quicksum(swp_dur[k] * v[k] for k in range(K))
+        - D_FABN * H == d_pos - d_neg,
         name="dur_gap_decomp",
     )
     model.addConstr(d_pos <= eps_D * H, name="dur_upper")
@@ -245,15 +268,16 @@ def _solve(
     for i in range(N):
         model.addConstr(h[i] - h_curr[i] == tc_plus[i] - tc_minus[i], name=f"tc_decomp_{i}")
 
-    # Lending-facility dynamics (direct qtr_bond_cf; no aug_bond_cf for SAP)
+    # Lending-facility dynamics (bonds + swap quarterly settlements)
     for q in range(Q):
-        CF_A_q = gp.quicksum(qtr_bond_cf[q, i] * h[i] for i in range(N))
-        CF_L_q = float(qtr_fabn_cf[q])
+        CF_A_q    = gp.quicksum(qtr_bond_cf[q, i] * h[i] for i in range(N))
+        swap_cf_q = gp.quicksum(swap_cf_sched[k, q] * v[k] for k in range(K))
+        CF_L_q    = float(qtr_fabn_cf[q])
         if q == 0:
-            model.addConstr(B[q] - s_net[q] == CF_A_q - CF_L_q, name=f"facility_{q}")
+            model.addConstr(B[q] - s_net[q] == CF_A_q + swap_cf_q - CF_L_q, name=f"facility_{q}")
         else:
             model.addConstr(
-                B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q - CF_L_q,
+                B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q + swap_cf_q - CF_L_q,
                 name=f"facility_{q}",
             )
 
@@ -274,6 +298,12 @@ def _solve(
             name=f"concentration_{issuer}",
         )
 
+    # Swap notional cap
+    model.addConstr(
+        gp.quicksum(v[k] for k in range(K)) <= v_max_frac * H,
+        name="swap_cap",
+    )
+
     # ── 2F. Solve ──────────────────────────────────────────────────────────
     model.optimize()
 
@@ -288,6 +318,7 @@ def _solve(
 
     # ── 3. Extract results ─────────────────────────────────────────────────
     h_opt = np.array([h[i].X for i in range(N)])
+    v_opt = np.array([v[k].X for k in range(K)])
 
     sap_val          = model.ObjVal
     nii_val          = float(sum(nii_rate[i]  * h_opt[i] for i in range(N)))
@@ -451,6 +482,23 @@ def _solve(
             "dual":  round(pv_sf_pi * 1e6, 2),
             "unit":  "$",
         },
+        {
+            "label": "Swap notional cap (per $1M relaxed)",
+            "dual":  round((_safe_pi("swap_cap") or 0.0) * 1e6, 2),
+            "unit":  "$",
+        },
+    ]
+
+    # ── 4b. Swap overlay allocations ──────────────────────────────────────
+    swap_allocations = [
+        {
+            "tenor_years": float(swap_tenor[k]),
+            "notional":    round(float(v_opt[k]), 2),
+            "fixed_rate":  round(float(c_swap[k]), 4),
+            "net_income":  round(float((c_swap[k] - r_float) * v_opt[k]), 2),
+            "dur_contrib": round(float(swp_dur[k] * v_opt[k] / H), 4),
+        }
+        for k in range(K)
     ]
 
     # ── 5. IMR schedule ────────────────────────────────────────────────────
@@ -534,4 +582,5 @@ def _solve(
         "imr_total_gain":     imr_total_gain,
         "imr_contributions":  imr_contributions,
         "static_comparison":  static_comparison,
+        "swap_allocations":   swap_allocations,
     }
