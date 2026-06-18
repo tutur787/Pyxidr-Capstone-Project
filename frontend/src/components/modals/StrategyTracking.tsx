@@ -22,6 +22,10 @@ function fmt$(n: number): string {
   return `${sign}$${abs.toFixed(0)}`
 }
 
+function fmtDual(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="h-20 bg-gray-800/40 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
@@ -594,7 +598,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                         }`}>
                           {row.dual === null
                             ? 'n/a'
-                            : `${row.dual >= 0 ? '+' : ''}${row.dual.toFixed(2)} ${row.unit}`}
+                            : `${row.dual >= 0 ? '+' : ''}${fmtDual(row.dual)} ${row.unit}`}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                           {row.dual === null

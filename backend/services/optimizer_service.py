@@ -419,6 +419,7 @@ def _solve(
             "spread_bps":       round(float(spread[i] * 1e4), 2),
             "duration":         round(float(durs[i]), 4),
             "sap_score_bps":    round(sap_rate * 1e4, 2),  # bps of net SAP per $ invested
+            "mid_price":        round(float(price[i]), 4),  # market price per $100 face
         }
         if delta_usd > 0:
             buys_raw.append(entry)

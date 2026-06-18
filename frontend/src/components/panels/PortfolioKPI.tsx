@@ -10,6 +10,7 @@ interface Props {
   optimizerResult?:  OptimizerResult | null
   optimizerLoading?: boolean
   history?:          HistoryEntry[]
+  appliedTxnCost?:   number
 }
 
 interface MetricProps {
@@ -121,6 +122,15 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
         ) : (
           <div className="h-48 mt-4">
             <ResponsiveContainer width="100%" height="100%">
+              {(() => {
+                const vals = data.map(d => d[dataKey] as number).filter(v => isFinite(v))
+                const minV = Math.min(...vals)
+                const maxV = Math.max(...vals)
+                const range = maxV - minV
+                const pad = range > 0 ? range * 0.25 : Math.abs(maxV) * 0.01
+                const yMin = Math.max(0, minV - pad)
+                const yMax = maxV + pad
+                return (
               <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                 <defs>
                   <linearGradient id="modal-grad" x1="0" y1="0" x2="0" y2="1">
@@ -135,6 +145,7 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
                   tickFormatter={(d: string) => d.slice(5)}
                 />
                 <YAxis
+                  domain={[yMin, yMax]}
                   tick={{ fill: '#6b7280', fontSize: 10 }}
                   tickFormatter={(v: number) => formatter(v)}
                   width={70}
@@ -154,6 +165,8 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
                   activeDot={{ r: 5 }}
                 />
               </AreaChart>
+                )
+              })()}
             </ResponsiveContainer>
           </div>
         )}
@@ -162,7 +175,7 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
   )
 }
 
-export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, history = [] }: Props) {
+export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, history = [], appliedTxnCost = 0 }: Props) {
   const isOptimal = optimizerResult?.status === 'optimal'
   const [expandedKPI, setExpandedKPI] = useState<string | null>(null)
 
@@ -197,25 +210,22 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
     : 'bg-gray-800 border-gray-700 text-gray-500'
 
   const regulatoryCapital  = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
-  const cumulativeTxnCost  = history.reduce((s, h) => s + h.txn_cost, 0)
   const marketValue        = isOptimal && optimizerResult
     ? optimizerResult.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
     : null
-  const swapAllocs         = optimizerResult?.swap_allocations ?? []
-  const totalSwapNotional  = swapAllocs.reduce((s, a) => s + a.notional, 0)
 
   // Modal config derived from expandedKPI
   type ModalCfg = { dataKey: keyof HistoryEntry; formatter: (v: number) => string; annotation?: string }
   const modalCfg: Record<string, ModalCfg> = {
     'Portfolio Value': {
-      dataKey:    'market_value',
-      formatter:  (v: number) => formatValue(v),
+      dataKey:   'market_value',
+      formatter: (v: number) => {
+        if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`
+        if (v >= 1_000_000)     return `$${(v / 1_000_000).toFixed(1)}M`
+        if (v >= 1_000)         return `$${(v / 1_000).toFixed(1)}k`
+        return `$${v.toLocaleString()}`
+      },
       annotation: 'Total portfolio market value = Σ(face × mid price / 100) across visited dates',
-    },
-    'Trading Cost': {
-      dataKey:   'txn_cost',
-      formatter: (v: number) => `−${formatValue(v)}`,
-      annotation: history.length > 1 ? `Cumulative: −${formatValue(cumulativeTxnCost)}` : undefined,
     },
   }
 
@@ -268,22 +278,11 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
               />
               <Metric
                 label="Trading Cost"
-                value={cumulativeTxnCost > 0 ? `−${formatValue(cumulativeTxnCost)}` : '$0'}
+                value={appliedTxnCost > 0 ? `−${formatValue(appliedTxnCost)}` : '$0'}
                 valueColor="text-red-400"
-                sublabel={`this rebalance: −${formatValue(optimizerResult.txn_cost)}`}
-                onClick={() => toggleKPI('Trading Cost')}
-                expanded={expandedKPI === 'Trading Cost'}
-                title="Cumulative bid-ask spread cost across all rebalances this session. Click to see evolution."
+                sublabel={`optimizer suggests: −${formatValue(optimizerResult.txn_cost)}`}
+                title="Cumulative bid-ask spread cost of trades you have actually applied this session."
               />
-              {totalSwapNotional > 1_000 && (
-                <Metric
-                  label="Swap Notional"
-                  value={formatValue(totalSwapNotional)}
-                  valueColor="text-purple-400"
-                  sublabel={`${swapAllocs.filter(a => a.notional > 1_000).length} receive-fixed`}
-                  title="Total notional of receive-fixed interest-rate swaps in the optimal overlay. See Strategy Tracking for details."
-                />
-              )}
             </div>
             <div className="border-t border-gray-800" />
           </>

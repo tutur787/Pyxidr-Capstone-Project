@@ -79,6 +79,32 @@ function TradeCard({
           <span>Dur <span className="text-gray-400 font-mono">{trade.duration.toFixed(1)} yr</span></span>
           {trade.rating && <span className="text-gray-500 font-mono">{trade.rating}</span>}
         </div>
+        {/* Price row */}
+        {(() => {
+          const mktPrice    = trade.mid_price
+          const shadowPrice = mktPrice * (1 + trade.duration * trade.sap_score_bps / 10_000)
+          const spread      = shadowPrice - mktPrice
+          return (
+            <div className="flex gap-4 mt-1.5 text-xs flex-wrap">
+              <span className="text-gray-600">
+                Price (Mkt){' '}
+                <span className="font-mono text-gray-300">${mktPrice.toFixed(2)}</span>
+              </span>
+              <span
+                className="text-gray-600"
+                title="LP-implied fair value: price at which this bond's net SAP contribution = 0. Above mkt = cheap (buy); below mkt = rich (sell)."
+              >
+                Price (Shadow){' '}
+                <span className={`font-mono font-semibold ${spread >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  ${shadowPrice.toFixed(2)}
+                </span>
+                <span className={`ml-1 ${spread >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  ({spread >= 0 ? '+' : ''}{spread.toFixed(2)})
+                </span>
+              </span>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Apply button */}

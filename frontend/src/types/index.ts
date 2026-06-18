@@ -76,6 +76,7 @@ export interface Trade {
   spread_bps:       number
   duration:         number
   sap_score_bps:    number  // net SAP contribution rate in bps per $ (NII − capital cost)
+  mid_price:        number  // market price per $100 face value
 }
 
 export interface AppliedTrade {

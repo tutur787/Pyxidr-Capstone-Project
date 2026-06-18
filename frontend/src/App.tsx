@@ -32,6 +32,9 @@ export default function App() {
   // Session history — one entry per date visited, updated on each optimizer run
   const [history, setHistory] = useState<HistoryEntry[]>([])
 
+  // Cumulative cost of trades the user actually applied (not the optimizer's full suggestion)
+  const [cumulativeAppliedTxnCost, setCumulativeAppliedTxnCost] = useState(0)
+
   useEffect(() => {
     fetch('/api/fabns')
       .then(r => r.json())
@@ -42,7 +45,7 @@ export default function App() {
   }, [])
 
   // ── Optimizer ──────────────────────────────────────────────────────────────
-  const runOptimizer = useCallback(async (d: string, p: HyperParams) => {
+  const runOptimizer = useCallback(async (d: string, p: HyperParams): Promise<OptimizerResult | null> => {
     setOptimizerLoading(true)
     setOptimizerError(null)
     const url =
@@ -76,6 +79,7 @@ export default function App() {
           return [...prev.filter(h => h.date !== data.date), entry]
             .sort((a, b) => a.date.localeCompare(b.date))
         })
+        return data
       } else if (data.status === 'infeasible') {
         setOptimizerError('Model infeasible — try relaxing constraints (ε_D, w_max, n_min)')
         setOptimizerResult(null)
@@ -88,9 +92,11 @@ export default function App() {
     } finally {
       setOptimizerLoading(false)
     }
+    return null
   }, [])
 
   const applyTrade = useCallback(async (trade: Trade) => {
+    const costBefore = optimizerResult?.txn_cost ?? 0
     await fetch('/api/portfolio/apply-trade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,13 +109,16 @@ export default function App() {
       h_opt:     trade.h_opt,
       appliedAt: date,
     }])
-    runOptimizer(date, hyperParams)
-  }, [date, hyperParams, runOptimizer])
+    const newResult = await runOptimizer(date, hyperParams)
+    const costAfter = newResult?.txn_cost ?? 0
+    setCumulativeAppliedTxnCost(prev => prev + Math.max(0, costBefore - costAfter))
+  }, [date, hyperParams, runOptimizer, optimizerResult])
 
   const resetPortfolio = useCallback(async () => {
     await fetch('/api/portfolio/reset', { method: 'POST' })
     setAppliedTrades([])
     setHistory([])
+    setCumulativeAppliedTxnCost(0)
     runOptimizer(date, hyperParams)
   }, [date, hyperParams, runOptimizer])
 
@@ -166,6 +175,7 @@ export default function App() {
             optimizerResult={optimizerResult}
             optimizerLoading={optimizerLoading}
             history={history}
+            appliedTxnCost={cumulativeAppliedTxnCost}
           />
         </div>
 
