@@ -196,16 +196,19 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
     : 'bg-gray-800 border-gray-700 text-gray-500'
 
-  const regulatoryCapital  = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
-  const cumulativeTxnCost  = history.reduce((s, h) => s + h.txn_cost, 0)
+  const regulatoryCapital = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
+  const cumulativeTxnCost = history.reduce((s, h) => s + h.txn_cost, 0)
+  const marketValue       = isOptimal && optimizerResult
+    ? optimizerResult.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
+    : null
 
   // Modal config derived from expandedKPI
   type ModalCfg = { dataKey: keyof HistoryEntry; formatter: (v: number) => string; annotation?: string }
   const modalCfg: Record<string, ModalCfg> = {
     'Portfolio Value': {
-      dataKey:   'sap_opt',
-      formatter: (v: number) => `$${(v / 1e6).toFixed(2)}M/yr`,
-      annotation: 'SAP income per year across visited dates',
+      dataKey:    'market_value',
+      formatter:  (v: number) => formatValue(v),
+      annotation: 'Total portfolio market value = Σ(face × mid price / 100) across visited dates',
     },
     'Trading Cost': {
       dataKey:   'txn_cost',
@@ -280,12 +283,13 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
         <div className="grid grid-cols-2 gap-3">
           <Metric
             label="Portfolio Value"
-            value={formatValue(kpis.value)}
+            value={marketValue !== null ? formatValue(marketValue) : formatValue(kpis.value)}
             neutral
             live={isOptimal}
             onClick={() => toggleKPI('Portfolio Value')}
             expanded={expandedKPI === 'Portfolio Value'}
-            title="Total par value — fixed budget H = $500M. Click to see SAP income evolution."
+            sublabel={marketValue !== null ? `par $500M · mkt ${((marketValue / 500_000_000) * 100).toFixed(2)}¢` : undefined}
+            title="Market value = Σ(face allocation × mid price / 100). Click to see evolution over visited dates."
           />
           <Metric
             label="Net SAP Rate"

@@ -359,6 +359,7 @@ def _solve(
             "spread_bps": round(float(spread[i] * 1e4), 2),
             "duration":   round(float(durs[i]), 4),
             "score_bps":  round(float(book_yield[i] * 1e4), 2),  # book yield in bps
+            "mid_price":  round(float(price[i]), 4),              # per $100 face
         })
     alloc_list.sort(key=lambda x: x["h_opt"], reverse=True)
 

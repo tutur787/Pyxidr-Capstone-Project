@@ -58,6 +58,7 @@ export default function App() {
       if (data.status === 'optimal') {
         setOptimizerResult(data)
         setHistory(prev => {
+          const marketValue = data.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
           const entry: HistoryEntry = {
             date:             data.date,
             sap_opt:          data.nev,
@@ -69,6 +70,7 @@ export default function App() {
             spread_bps:       data.spread_bps,
             n_bonds_selected: data.n_bonds_selected,
             txn_cost:         data.txn_cost,
+            market_value:     marketValue,
           }
           // Replace any existing entry for this date, then keep sorted
           return [...prev.filter(h => h.date !== data.date), entry]

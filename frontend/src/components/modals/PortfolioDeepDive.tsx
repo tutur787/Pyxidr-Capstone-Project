@@ -1,5 +1,6 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  ComposedChart, Line, CartesianGrid,
 } from 'recharts'
 import Modal from './Modal'
 import type { BondAllocation, OptimizerResult } from '../../types'
@@ -122,6 +123,81 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
             <p className="text-gray-600 text-xs mt-2 text-center">
               {loading ? 'Optimizer running…' : 'Bond-level data will populate from the optimizer output.'}
             </p>
+          )}
+        </div>
+
+        {/* Quarterly Cashflow chart */}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-white font-medium text-sm">Quarterly Cashflow</h3>
+            <span className="text-gray-600 text-xs">Asset receipts vs FABN obligations</span>
+          </div>
+          <p className="text-gray-600 text-xs mb-3">
+            Green bars = bond coupons + maturities received. Red bars = FABN liability payments due.
+            Amber line = credit facility balance (right axis).
+          </p>
+          {isOptimal && (result?.cashflows ?? []).length > 0 ? (() => {
+            const cfData = (result!.cashflows).map(row => ({
+              ...row,
+              fabn_cf_neg: -row.fabn_cf,
+            }))
+            const fmtM = (v: number) => {
+              const abs = Math.abs(v)
+              const sign = v < 0 ? '-' : ''
+              return abs >= 1_000_000
+                ? `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+                : `${sign}$${(abs / 1_000).toFixed(0)}k`
+            }
+            return (
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={cfData} margin={{ top: 4, right: 56, bottom: 0, left: 16 }}>
+                    <CartesianGrid stroke="#1f2937" vertical={false} />
+                    <XAxis
+                      dataKey="period"
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
+                      tickFormatter={fmtM}
+                      width={52}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
+                      tickFormatter={fmtM}
+                      width={52}
+                    />
+                    <Tooltip
+                      contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
+                      formatter={(value: number, name: string) => [
+                        fmtM(Math.abs(value)),
+                        name === 'asset_cf'   ? 'Asset receipts' :
+                        name === 'fabn_cf_neg' ? 'FABN obligations' :
+                        'Facility balance',
+                      ]}
+                    />
+                    <Bar yAxisId="left" dataKey="asset_cf"    fill="#10b981" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Bar yAxisId="left" dataKey="fabn_cf_neg" fill="#ef4444" opacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Line yAxisId="right" type="monotone" dataKey="facility_bal" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-5 justify-center mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2 rounded-sm bg-emerald-500/80" />Asset receipts</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2 rounded-sm bg-red-500/75" />FABN obligations</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-amber-400" />Facility balance</span>
+                </div>
+              </div>
+            )
+          })() : (
+            <div className="h-20 bg-gray-800/40 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
+              <p className="text-gray-600 text-sm">
+                {loading ? 'Optimizer running…' : 'Quarterly cashflow chart — run optimizer to populate'}
+              </p>
+            </div>
           )}
         </div>
 

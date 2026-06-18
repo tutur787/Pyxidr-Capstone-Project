@@ -62,6 +62,7 @@ export interface BondAllocation {
   spread_bps: number
   duration:   number
   score_bps:  number
+  mid_price:  number   // per $100 face value
 }
 
 export interface Trade {
@@ -96,6 +97,7 @@ export interface HistoryEntry {
   spread_bps:       number
   n_bonds_selected: number
   txn_cost:         number   // turnover/trading cost for this rebalance
+  market_value:     number   // Σ(h_opt_i × mid_price_i / 100) — total portfolio market value
 }
 
 export interface ConstraintResult {
