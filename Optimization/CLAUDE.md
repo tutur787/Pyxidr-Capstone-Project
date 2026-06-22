@@ -311,6 +311,49 @@ no-IMR / IMR-in-window / IMR-fully-recognized side by side. The single-period op
 
 ---
 
+## Phase 3 — "Size of the Prize": perfect-foresight upper bound (`Size of the Prize/`)
+
+A side-analysis (mirrors `Shadow & SWAP Analysis/`) answering the McKinsey "size of the prize"
+question: *with perfect foresight of the 2-year price path, what is the maximum cumulative SAP NII —
+carry **plus** IMR-recognized trading gains, net of bid-ask/2 — and is there upside worth building?*
+It is a **ceiling** (not a strategy); the gap to the realistic dynamic backtest is the prize.
+
+**Method — time-expanded "trade-arc" LP.** Perfect foresight makes each trade
+`a = (bond i, buy node m, close node n)` a *constant* per-dollar profit, keeping SAP book-yield
+locking **linear**: `coef_a = net_carry_a + imr_window_a − cost_a` (locked carry net of capital +
+windowed-IMR gain − bid-ask/2 both legs). Decision `x_a ≥ 0` = dollars of **book value**, *conserved*
+(a dollar freed when an arc closes can only then fund a new buy) — so realized gains **never** become
+redeployable principal (the anti-liquidation discipline, same rule as §market-value-trick above).
+Constraints reuse the backtest forms per grid interval: soft duration band, issuer cap, capital priced
+in the objective, optional facility + PV-shortfall cap.
+
+| File | Role |
+|---|---|
+| `prize_foresight.py` | Pure, tested module: `arc_economics`, `build_arcs` (with `max_hold_nodes` cap), `solve_prize` (Gurobi), and `load_dotenv_creds` / `make_gurobi_env` (license bootstrap). Reuses `fabn_finance`. |
+| `FABN_Size_of_Prize.ipynb` | Driver: loads shared panels, grid sweep, reports prize + decomposition + gaps, assertions. |
+| `prize_theory.md` / `RESULTS.md` / `README.md` | Theory & business framing / computed numbers / orientation. |
+| `tests/test_prize_foresight.py` | 7 pytest tests (single-arc identity vs backtest accrual, IMR-window conservation, etc.). |
+
+**Shared precompute (no silent divergence).** The backtest now has an additive `export_panels()` cell
+(after Section-1 precompute) that dumps `Y/DUR/TAU/MID/ELIG/QB/FB/theta/...` to
+`Size of the Prize/prize_panels.npz`; the prize notebook loads it. Run the backtest precompute + that
+cell once, then run the prize notebook. (`prize_panels.npz` is git-ignored — proprietary pricing data.)
+
+**Licensing.** The arc LP is large (~50k–1.5M vars), exceeding the free 2000-var license. `.env` WLS
+creds are loaded explicitly (`make_gurobi_env`) — but **not** exported to `os.environ` (stale WLS vars
+would mask a valid academic `gurobi.lic`). It prefers any working unlimited license, else WLS, else
+size-limited (with a `MAX_BONDS` LITE fallback in the notebook).
+
+**Key results (placeholders; see `RESULTS.md`).** Windowed prize ~**$42M (monthly)** → **$54M
+(weekly)** vs realistic dynamic ~$31M → a **~$11–23M (+35–75%)** prize. **Carry is identical** static
+vs dynamic; the entire edge is **rate-rotation trading gains (IMR)**, funded by turnover. The prize
+**does not plateau** (finer grid → more wiggles harvested). ⚠️ **Daily × full universe is an
+upper-bound artifact**: `max_hold_nodes` makes it tractable, but daily foresight with **no
+market-impact cost** churns ~100× book ($52B traded at L=10 → $96M, all gains-harvesting). Quote
+monthly/weekly; the natural next step is a **market-impact / capacity cost**.
+
+---
+
 ## Conventions & gotchas
 
 - Cashflows from `Asset_Cashflows` are **per 100 face**; the pipeline divides by 100 → per $1 face.
