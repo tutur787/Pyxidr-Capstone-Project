@@ -193,6 +193,49 @@ issuer = first 6 CUSIP chars; prices treated as clean (no accrued-interest separ
 `pytest tests/` covers: par/premium/discount book yield and the IRR round-trip; zero-coupon modified
 duration `= T/(1+y)`; the `book_yield = coupon_inc + amort_inc` identity and amort signs; C-1 lookup
 incl. Moody's fallback and BBB default; (Phase 2) the IMR amortization identity `Σ released = Σ gains`.
+`pytest "Size of the Prize/tests/"` adds the Phase-3 arc-economics checks (single-arc identity vs the
+backtest accrual, IMR-window conservation, upper-bound sanity, cash-conservation feasibility).
 See the plan's Test Plan for the in-notebook invariant/accounting/behavioral checks (budget, duration
 band, cash-conservation reconciliation, and the `τ→0 ⇒ dynamic≥static`, `τ→∞ ⇒ dynamic→static`
 monotonicity tests).
+
+## 9. Size of the Prize — perfect-foresight upper bound (Phase 3, `Size of the Prize/`)
+
+**Question.** With the full 2-year price path known in advance, what is the maximum cumulative SAP NII
+— carry **plus** IMR-recognized trading gains, net of bid-ask/2 — achievable under the same
+constraints? This is a **ceiling**, not a strategy; the gap to the realistic dynamic backtest is the
+"size of the prize" (does the problem have tradeable upside worth pursuing?).
+
+**Formulation (time-expanded trade-arc LP).** Perfect foresight makes each trade
+`a = (bond i, buy node m, close node n)` carry a *constant* per-dollar profit, which keeps SAP
+book-yield **locking** linear:
+
+- `net_carry_a = ((Y[m,i] − r_FABN) − λ·θ_i)·(t_n − t_m)` — income at the **locked** purchase yield,
+  net of the capital charge (λ = `cost_of_capital·RBC_bar`), over the holding span.
+- `imr_window_a` — the realized rate-driven gain at the sale (`amortize_price_to_par` basis →
+  `realized_gain_on_sale`), recognized straight-line over the sold bond's remaining life, counting
+  only the portion released **inside the window** (`imr_full_a` = the ultimate gain). Held-to-maturity
+  arcs redeem at par: no sell cost, no gain.
+- `cost_a = τ[m,i] (+ τ[n,i] if sold)` — bid-ask/2 on each traded leg.
+
+Decision `x_a ≥ 0` = dollars of **book value**, **conserved** across grid nodes (a dollar freed when an
+arc closes can only then fund a new buy). This is the SAP `Σh = H` invariant and the key discipline:
+realized gains flow into income via the IMR and are **never** added back to redeployable principal — no
+liquidation-proceeds inflation. Objective `max Σ coef_a·x_a` (`coef_a = net_carry + imr_window − cost`)
+s.t. soft duration band, issuer cap, capital-in-objective, and (optional) the quarterly facility +
+PV-shortfall cap. Code: `prize_foresight.py` (`build_arcs`, `solve_prize`), reusing `fabn_finance`.
+
+**Why the answer is mostly trading gains, not carry.** IMR amortizes a gain over the sold bond's
+remaining life, so naive *symmetric* gains-trading is a wash. But the 2024–26 path had large
+**directional** rate moves: with foresight you systematically buy before prices rise / sell at the top,
+and a large slice is recognized in-window. Empirically carry is ~identical static vs dynamic; the prize
+is rotation-timing IMR. A dollar of NII and a dollar of (windowed) IMR are weighted **1:1** in the
+objective; to prefer recurring NII, weight the IMR term by `α<1` (`coef = net_carry + α·imr_window −
+cost`), which also damps over-trading.
+
+**Tractability & honesty.** Arcs grow `O(N·P²)` in grid nodes `P`; full-universe daily (`P≈498`,
+~37M arcs) is intractable, so `build_arcs(max_hold_nodes=L)` caps the sell horizon → `O(N·P·L)`. The
+prize **does not plateau** with grid refinement, and the model charges **only bid-ask/2 with no market
+impact** — so fine grids (esp. daily) are upper-bound **artifacts** (daily L=10 churns ~100× book).
+The defensible figures are monthly/weekly; **market-impact / capacity cost** is the natural next
+extension. See `Size of the Prize/RESULTS.md` for the numbers and `prize_theory.md` for the rationale.
