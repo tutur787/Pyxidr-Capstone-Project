@@ -1,0 +1,8 @@
+# Generated precompute panels (proprietary BigQuery pricing data; ~3.6 MB).
+# Regenerate via the export_panels() cell in FABN_Optimizer_SAP_Backtest.ipynb.
+prize_panels.npz
+
+# caches
+__pycache__/
+*.pyc
+.pytest_cache/
