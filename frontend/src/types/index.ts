@@ -61,8 +61,9 @@ export interface BondAllocation {
   weight:     number
   spread_bps: number
   duration:   number
-  score_bps:  number
-  mid_price:  number   // per $100 face value
+  score_bps:    number
+  mid_price:    number   // per $100 face value
+  reduced_cost: number   // Gurobi reduced cost: SAP δ per $ of h[i]
 }
 
 export interface Trade {
@@ -169,6 +170,8 @@ export interface OptimizerResult {
   c3_cost:          number
   txn_cost:         number
   duration_gap:     number
+  r_FABN:           number   // FABN crediting rate (e.g. 0.03205)
+  r_float:          number   // 3M Treasury / SOFR proxy
   allocations:      BondAllocation[]
   trades:           Trade[]
   constraints:      ConstraintResult[]

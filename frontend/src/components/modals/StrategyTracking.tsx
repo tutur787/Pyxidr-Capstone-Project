@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   ComposedChart, Bar, Line, Area,
+  ScatterChart, Scatter,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Legend,
 } from 'recharts'
@@ -30,6 +31,37 @@ function EmptyState({ label }: { label: string }) {
   return (
     <div className="h-20 bg-gray-800/40 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
       <p className="text-gray-600 text-sm">{label}</p>
+    </div>
+  )
+}
+
+// ── LP helpers ────────────────────────────────────────────────────────────────
+
+function ratingBucket(rating: string): string {
+  const r = (rating ?? '').toUpperCase()
+  if (r.startsWith('AAA') || r.startsWith('AA')) return '#3b82f6'
+  if (r.startsWith('A') && !r.startsWith('AA')) return '#10b981'
+  if (r.startsWith('BBB') || r.startsWith('BAA')) return '#f59e0b'
+  return '#ef4444'
+}
+
+const LP_BUCKET_LABELS: [string, string][] = [
+  ['#3b82f6', 'AAA/AA'],
+  ['#10b981', 'A'],
+  ['#f59e0b', 'BBB'],
+  ['#ef4444', 'BB / below'],
+]
+
+function LPScatterTooltip({ active, payload }: any) {
+  if (!active || !payload?.[0]) return null
+  const d = payload[0].payload
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs shadow-xl">
+      <p className="text-amber-400 font-mono font-semibold mb-1">{d.cusip}</p>
+      <p className="text-gray-400">Rating: <span className="text-gray-200">{d.rating}</span></p>
+      <p className="text-gray-400">Z-Spread: <span className="text-blue-400 font-mono">{(d.x as number).toFixed(1)} bps</span></p>
+      <p className="text-gray-400">Duration: <span className="text-gray-200 font-mono">{(d.duration as number).toFixed(2)} yr</span></p>
+      <p className="text-gray-400">Shadow Price: <span className="text-emerald-400 font-mono">{(d.y as number).toFixed(4)} bps</span></p>
     </div>
   )
 }
@@ -76,6 +108,14 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
   const isOptimal = result?.status === 'optimal'
   const sc        = isOptimal ? result!.static_comparison : null
   const [showAllIMR, setShowAllIMR] = useState(false)
+  const [showAllLP,  setShowAllLP]  = useState(false)
+  const [lpSortKey,  setLpSortKey]  = useState<'reduced_cost' | 'spread_bps' | 'duration'>('reduced_cost')
+  const [lpSortDesc, setLpSortDesc] = useState(true)
+
+  function toggleLpSort(key: 'reduced_cost' | 'spread_bps' | 'duration') {
+    if (lpSortKey === key) setLpSortDesc(d => !d)
+    else { setLpSortKey(key); setLpSortDesc(true) }
+  }
 
   // Dates where at least one trade was applied (for reference lines on the chart)
   const appliedDates = [...new Set(appliedTrades.map(a => a.appliedAt))]
@@ -97,6 +137,34 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
   }, [history])
 
   const cumulativeAlpha = cumulativeData.length ? cumulativeData[cumulativeData.length - 1].cum_alpha : 0
+
+  const LP_PAGE = 15
+
+  const lpAllocs = useMemo(() => {
+    const allocs = result?.allocations ?? []
+    return [...allocs].sort((a, b) => {
+      const av = ((a as any)[lpSortKey] ?? 0) as number
+      const bv = ((b as any)[lpSortKey] ?? 0) as number
+      return lpSortDesc ? bv - av : av - bv
+    })
+  }, [result?.allocations, lpSortKey, lpSortDesc])
+
+  const lpScatterGroups = useMemo(() => {
+    const allocs = result?.allocations ?? []
+    const groups: Record<string, { x: number; y: number; cusip: string; rating: string; duration: number }[]> =
+      Object.fromEntries(LP_BUCKET_LABELS.map(([c]) => [c, []]))
+    for (const a of allocs) {
+      const color = ratingBucket(a.rating)
+      groups[color]?.push({
+        x:        a.spread_bps,
+        y:        (a.reduced_cost ?? 0) * 1e4,
+        cusip:    a.cusip,
+        rating:   a.rating,
+        duration: a.duration,
+      })
+    }
+    return groups
+  }, [result?.allocations])
 
   // Summary stats over the history
   const latestAlpha  = history.length ? history[history.length - 1].alpha : 0
@@ -558,6 +626,178 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* ── Section LP-A: Return on Equity (LP View) ─────────────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-white font-medium text-sm">Return on Equity</h3>
+            <span className="text-gray-600 text-xs">LP view — statutory earnings vs regulatory capital</span>
+            <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
+          </div>
+          <p className="text-gray-600 text-xs mb-3">
+            ROE measures statutory NII relative to NAIC required capital (C1 × 1.5×).
+            FABN is primarily a spread opportunity — returns are driven by credit and duration risk taken on the asset side.
+          </p>
+
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see ROE metrics" />
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  {
+                    label:   'ROE (Statutory)',
+                    value:   `${(result!.rbc_ratio * 100).toFixed(1)}%`,
+                    sublabel: 'NII / Req. Capital',
+                    color:   result!.rbc_ratio >= 0.1 ? 'text-emerald-400' : 'text-amber-400',
+                  },
+                  {
+                    label:   'Capital Intensity',
+                    value:   `${(result!.rbc_c1_usage * 100).toFixed(2)}%`,
+                    sublabel: 'C1 RBC / Portfolio',
+                    color:   'text-blue-400',
+                  },
+                  {
+                    label:   'Benchmark Alpha',
+                    value:   `${result!.nev - result!.static_comparison.sap >= 0 ? '+' : ''}${fmt$(result!.nev - result!.static_comparison.sap)}`,
+                    sublabel: 'Optimizer vs Equal-Weight',
+                    color:   result!.nev - result!.static_comparison.sap >= 0 ? 'text-emerald-400' : 'text-red-400',
+                  },
+                ] as const).map(({ label, value, sublabel, color }) => (
+                  <div key={label} className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <p className="text-gray-500 text-xs mb-1 uppercase tracking-wider">{label}</p>
+                    <p className={`font-mono font-semibold text-xl ${color}`}>{value}</p>
+                    <p className="text-gray-600 text-[10px] mt-0.5">{sublabel}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 px-3 py-2.5 bg-blue-500/5 rounded-lg border border-blue-500/10">
+                <p className="text-gray-500 text-xs leading-relaxed">
+                  <span className="text-blue-400 font-medium">LP context: </span>
+                  The chart and table below show the <span className="text-gray-300">shadow price of each bond</span> —
+                  the marginal SAP improvement from increasing its allocation. Compare to Z-spread to assess whether
+                  the optimizer is extracting value in proportion to the credit and duration risk taken.
+                </p>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* ── Section LP-B: Per-Bond Shadow Price vs Z-Spread ───────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-white font-medium text-sm">Marginal LP Value vs Z-Spread</h3>
+            <span className="text-gray-600 text-xs">Per-bond Gurobi reduced costs</span>
+            <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
+          </div>
+          <p className="text-gray-600 text-xs mb-3">
+            X = Z-spread (credit risk proxy, bps). Y = reduced cost × 10 000 (bps) — SAP improvement per $1 invested.
+            Bonds above zero are at their upper weight limit; their constraint is binding on the optimizer.
+          </p>
+
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see per-bond shadow prices" />
+          ) : (
+            <>
+              {/* Scatter chart */}
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 8, right: 20, bottom: 24, left: 10 }}>
+                    <CartesianGrid stroke="#1f2937" />
+                    <XAxis
+                      dataKey="x"
+                      type="number"
+                      name="Z-Spread"
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
+                      label={{ value: 'Z-Spread (bps)', position: 'insideBottom', offset: -12, fill: '#6b7280', fontSize: 10 }}
+                    />
+                    <YAxis
+                      dataKey="y"
+                      type="number"
+                      name="Shadow Price"
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
+                      tickFormatter={(v: number) => v.toFixed(3)}
+                      label={{ value: 'Shadow (bps)', angle: -90, position: 'insideLeft', offset: 12, fill: '#6b7280', fontSize: 10 }}
+                    />
+                    <Tooltip content={<LPScatterTooltip />} cursor={{ stroke: '#374151', strokeWidth: 1 }} />
+                    <ReferenceLine y={0} stroke="#4b5563" strokeDasharray="4 2" />
+                    {LP_BUCKET_LABELS.map(([color]) => (
+                      <Scatter key={color} data={lpScatterGroups[color] ?? []} fill={color} opacity={0.8} />
+                    ))}
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 justify-center mt-1 mb-4 text-xs text-gray-500">
+                {LP_BUCKET_LABELS.map(([color, label]) => (
+                  <span key={label} className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Sortable table */}
+              <div className="rounded-xl border border-gray-700 overflow-hidden">
+                <div className={`overflow-x-auto ${showAllLP ? 'overflow-y-auto max-h-[500px]' : ''}`}>
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0">
+                      <tr className="bg-gray-800/90 border-b border-gray-700">
+                        {([
+                          { key: 'cusip',        label: 'CUSIP',                 sortable: false },
+                          { key: 'rating',       label: 'Rating',                sortable: false },
+                          { key: 'duration',     label: 'Duration (yr)',          sortable: true  },
+                          { key: 'spread_bps',   label: 'Z-Spread (bps)',         sortable: true  },
+                          { key: 'reduced_cost', label: 'Shadow Price (SAP/$1M)', sortable: true  },
+                        ]).map(col => (
+                          <th
+                            key={col.key}
+                            onClick={col.sortable
+                              ? () => toggleLpSort(col.key as 'reduced_cost' | 'spread_bps' | 'duration')
+                              : undefined}
+                            className={`px-4 py-2 text-left text-gray-400 font-medium whitespace-nowrap
+                              ${col.sortable ? 'cursor-pointer hover:text-amber-400 select-none' : ''}`}
+                          >
+                            {col.label}
+                            {col.sortable && lpSortKey === col.key && (
+                              <span className="ml-1 text-amber-400">{lpSortDesc ? '▼' : '▲'}</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(showAllLP ? lpAllocs : lpAllocs.slice(0, LP_PAGE)).map((a, i) => {
+                        const rc = a.reduced_cost ?? 0
+                        return (
+                          <tr key={i} className={`border-b border-gray-800/60 hover:bg-gray-800/30 ${rc > 0 ? 'bg-amber-500/5' : ''}`}>
+                            <td className="px-4 py-2.5 font-mono text-amber-400">{a.cusip}</td>
+                            <td className="px-4 py-2.5 font-mono text-gray-300">{a.rating}</td>
+                            <td className="px-4 py-2.5 font-mono text-gray-300">{a.duration.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 font-mono text-blue-400">{a.spread_bps.toFixed(1)}</td>
+                            <td className={`px-4 py-2.5 font-mono font-semibold ${rc > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                              {(rc * 1e6).toFixed(2)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {lpAllocs.length > LP_PAGE && (
+                  <div className="border-t border-gray-700 bg-gray-800/60">
+                    <button
+                      onClick={() => setShowAllLP(v => !v)}
+                      className="w-full py-2 text-xs text-gray-400 hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      {showAllLP ? <>▲ Show fewer</> : <>▼ Show all {lpAllocs.length} bonds</>}
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}

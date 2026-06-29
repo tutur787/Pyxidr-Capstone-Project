@@ -366,6 +366,52 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
           />
         </div>
 
+        {/* ── FABN vs Market (Client View) ───────────────────────────────── */}
+        {isOptimal && optimizerResult && (() => {
+          const rFABN        = optimizerResult.r_FABN
+          const rFloat       = optimizerResult.r_float
+          const spreadBps    = (rFABN - rFloat) * 10_000
+          const niiMarginBps = (optimizerResult.yield_pct / 100 - rFABN) * 10_000
+          return (
+            <>
+              <div className="border-t border-gray-800" />
+              <SectionLabel>FABN vs Market — Client View</SectionLabel>
+              <div className="grid grid-cols-2 gap-3">
+                <Metric
+                  label="FABN Crediting Rate"
+                  value={`${(rFABN * 100).toFixed(3)}%`}
+                  neutral live
+                  title="Fixed rate paid to FABN holders (funding agreement crediting rate)"
+                />
+                <Metric
+                  label="3M Treasury (Benchmark)"
+                  value={`${(rFloat * 100).toFixed(3)}%`}
+                  neutral live
+                  title="3-month Treasury rate from FRED — money market / risk-free benchmark"
+                />
+                <Metric
+                  label="Client Spread to Treasury"
+                  value={`${spreadBps >= 0 ? '+' : ''}${spreadBps.toFixed(1)} bps`}
+                  valueColor={spreadBps >= 0 ? 'text-emerald-400' : 'text-amber-400'}
+                  live
+                  sublabel={spreadBps < 0 ? 'Below money market rate' : 'Above money market rate'}
+                  title={spreadBps >= 0
+                    ? 'FABN is pricing above 3M Treasury — accretive to clients vs risk-free'
+                    : 'FABN crediting rate is below 3M Treasury — FABN is pricing below money market'}
+                />
+                <Metric
+                  label="Insurer NII Margin"
+                  value={`${niiMarginBps >= 0 ? '+' : ''}${niiMarginBps.toFixed(1)} bps`}
+                  valueColor={niiMarginBps >= 0 ? 'text-emerald-400' : 'text-red-400'}
+                  live
+                  sublabel="book yield − r_FABN"
+                  title="Portfolio yield minus FABN crediting rate — insurer's net interest margin before capital costs"
+                />
+              </div>
+            </>
+          )
+        })()}
+
       </div>
 
       {/* ── Evolution modal ───────────────────────────────────────────────── */}

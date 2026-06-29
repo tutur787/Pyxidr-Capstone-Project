@@ -410,8 +410,9 @@ def _solve(
             "weight":     round(float(h_opt[i] / H), 6),
             "spread_bps": round(float(spread[i] * 1e4), 2),
             "duration":   round(float(durs[i]), 4),
-            "score_bps":  round(float(book_yield[i] * 1e4), 2),  # book yield in bps
-            "mid_price":  round(float(price[i]), 4),              # per $100 face
+            "score_bps":    round(float(book_yield[i] * 1e4), 2),  # book yield in bps
+            "mid_price":    round(float(price[i]), 4),              # per $100 face
+            "reduced_cost": round(float(h[i].RC), 6),              # Gurobi reduced cost: SAP δ per $
         })
     alloc_list.sort(key=lambda x: x["h_opt"], reverse=True)
 
@@ -593,6 +594,8 @@ def _solve(
         "c3_cost":          round(float(savings_val), 2),            # savings income
         "txn_cost":         round(float(turnover_val), 2),
         "duration_gap":     round(float(abs(D_avg - D_FABN)), 4),
+        "r_FABN":           round(float(r_FABN), 6),
+        "r_float":          round(float(r_float), 6),
         # Detail arrays
         "allocations":      alloc_list,
         "trades":           trades,
