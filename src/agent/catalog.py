@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 
+from agent.contribution_analysis import analyze_contributions, to_agent_context
 from agent.schemas import SelectRequest
 
 # Gurobi status codes (avoid importing gurobipy in lightweight paths)
@@ -21,6 +22,8 @@ def execute_select(req: SelectRequest, job: Any) -> dict[str, Any]:
         return _top_holdings_delta(job, limit=req.limit)
     if req.query_id == "recommended_trades":
         return _recommended_trades(job, limit=req.limit)
+    if req.query_id == "contribution_analysis":
+        return _contribution_analysis(job)
     raise ValueError(f"unknown query_id: {req.query_id}")
 
 
@@ -95,3 +98,46 @@ def _recommended_trades(job: Any, *, limit: int) -> dict[str, Any]:
         "optimization_date": opt_date,
         "rows": trades[:limit],
     }
+
+
+def _contribution_analysis(job: Any) -> dict[str, Any]:
+    opt_date = str(job.params.optimization_date.date())
+    if not job.is_optimal:
+        return {
+            "query_id": "contribution_analysis",
+            "optimization_date": opt_date,
+            "message": "no optimal holdings; contribution analysis requires h_opt",
+        }
+
+    p = job.pipeline
+    cusips: list[str] = p["CUSIPS"]
+    h_opt = job.solve.h_opt
+    book_yield = p["book_yield"]   # fraction, multiply by 100 for pct
+    theta = p["theta"]             # rbc_factor as fraction; *100 for pct
+    spread = p["spread"]
+    fixed = p["fixed"]             # DataFrame with CUSIP, sector, rating_sp, mac_dur_bbg
+
+    fixed_indexed = fixed.set_index("CUSIP")
+
+    records = []
+    for i, cusip in enumerate(cusips):
+        row = fixed_indexed.loc[cusip] if cusip in fixed_indexed.index else {}
+        records.append({
+            "CUSIP": cusip,
+            "Sector": row["sector"] if hasattr(row, "__getitem__") and "sector" in row else "Unknown",
+            "Rating": row["rating_sp"] if hasattr(row, "__getitem__") and "rating_sp" in row else "NR",
+            "h_opt_usd": float(h_opt[i]),
+            "book_yield_pct": float(book_yield[i]) * 100,
+            "spread_bps": float(spread[i]) * 10_000,
+            "duration_yrs": float(row["mac_dur_bbg"]) if hasattr(row, "__getitem__") and "mac_dur_bbg" in row else 0.0,
+            "rbc_factor_pct": float(theta[i]) * 100,
+        })
+
+    result = analyze_contributions(
+        records,
+        optimization_date=opt_date,
+        optimizer_summary_rbc_usd=job.solve.RBC_val,
+    )
+    data = to_agent_context(result)
+    data["query_id"] = "contribution_analysis"
+    return data
