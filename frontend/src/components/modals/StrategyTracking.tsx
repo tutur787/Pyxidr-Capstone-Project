@@ -639,7 +639,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
             <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
           </div>
           <p className="text-gray-600 text-xs mb-3">
-            ROE measures statutory NII relative to NAIC required capital (C1 × 1.5×).
+            ROE measures statutory NII relative to NAIC required capital (C1 × 3×).
             FABN is primarily a spread opportunity — returns are driven by credit and duration risk taken on the asset side.
           </p>
 

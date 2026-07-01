@@ -108,7 +108,7 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           <ParamSlider
             symbol="γ"
             label="Cost of capital (WACC)"
-            description="Insurer WACC on required capital. Sets λ_cap = γ × 1.5, the coefficient on RBC = Σθᵢhᵢ in the SAP objective. Calibrated default 0.15 (15%). Higher = penalise RBC usage more strongly."
+            description="Insurer WACC on required capital. Sets λ_cap = γ × 3, the coefficient on RBC = Σθᵢhᵢ in the SAP objective. Calibrated default 0.15 (15%). Higher = penalise RBC usage more strongly."
             value={params.gamma_w}
             min={0} max={1.0} step={0.01}
             format={v => `${(v * 100).toFixed(0)}%`}

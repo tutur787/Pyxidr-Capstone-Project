@@ -58,7 +58,7 @@ H       = 500_000_000.0   # total capital budget ($)
 r_FABN  = FABN_COUPON     # funding agreement crediting rate (annual, decimal)
 C_curr  = 5_000_000.0     # current regulatory capital ($)
 C_min   = 1_000_000.0     # minimum required capital ($)
-RBC_bar = 1.5             # minimum RBC solvency ratio
+RBC_bar = 3.0             # minimum RBC solvency ratio
 dt      = 1.0             # time scaling factor (1 = annual)
 
 gamma_w  = 0.15  # γ : weight on capital cost (C1 + C3)

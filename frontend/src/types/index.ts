@@ -145,6 +145,14 @@ export interface StaticComparison {
   n_bonds:      number
 }
 
+export interface FabnMarketPoint {
+  date:          string
+  fabn_ytm:      number
+  treasury_ytm:  number
+  spread_bps:    number
+  prime_rate:    number
+}
+
 export interface SwapAllocation {
   tenor_years: number
   notional:    number   // $
@@ -172,6 +180,7 @@ export interface OptimizerResult {
   duration_gap:     number
   r_FABN:           number   // FABN crediting rate (e.g. 0.03205)
   r_float:          number   // 3M Treasury / SOFR proxy
+  rbc_bar:          number   // required-capital multiplier (e.g. 3.0)
   allocations:      BondAllocation[]
   trades:           Trade[]
   constraints:      ConstraintResult[]

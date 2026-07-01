@@ -12,7 +12,7 @@ import Risk from './components/modals/Risk'
 import DerivativeUsage from './components/modals/DerivativeUsage'
 import { useDate } from './hooks/useDate'
 import { defaultHyperParams, STUB_FABNS } from './data/stubs'
-import type { TabId, HyperParams, Fabn, OptimizerResult, Trade, AppliedTrade, HistoryEntry } from './types'
+import type { TabId, HyperParams, Fabn, OptimizerResult, Trade, AppliedTrade, HistoryEntry, FabnMarketPoint } from './types'
 
 export default function App() {
   const { date, advanceDate, jumpToDate, isAtMin, isAtMax, formatDisplay } = useDate()
@@ -20,6 +20,7 @@ export default function App() {
   const [hyperParams, setHyperParams] = useState<HyperParams>(defaultHyperParams)
   const [fabns, setFabns] = useState<Fabn[]>(STUB_FABNS)
   const [selectedFabns, setSelectedFabns] = useState<Fabn[]>([])
+  const [fabnMarketHistory, setFabnMarketHistory] = useState<FabnMarketPoint[]>([])
 
   // Optimizer state
   const [optimizerResult, setOptimizerResult]   = useState<OptimizerResult | null>(null)
@@ -53,6 +54,13 @@ export default function App() {
         if (data && data.length > 0) setFabns(data)
       })
       .catch(() => {}) // keep stubs on failure
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/fabn-market-history')
+      .then(r => r.json())
+      .then((data: FabnMarketPoint[]) => setFabnMarketHistory(data))
+      .catch(() => {})
   }, [])
 
   // ── Optimizer ──────────────────────────────────────────────────────────────
@@ -226,6 +234,8 @@ export default function App() {
             optimizerLoading={optimizerLoading}
             history={history}
             appliedTxnCost={cumulativeAppliedTxnCost}
+            fabnMarketHistory={fabnMarketHistory}
+            gammaW={hyperParams.gamma_w}
           />
         </div>
 

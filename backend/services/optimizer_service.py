@@ -596,6 +596,7 @@ def _solve(
         "duration_gap":     round(float(abs(D_avg - D_FABN)), 4),
         "r_FABN":           round(float(r_FABN), 6),
         "r_float":          round(float(r_float), 6),
+        "rbc_bar":          round(float(RBC_bar), 4),
         # Detail arrays
         "allocations":      alloc_list,
         "trades":           trades,

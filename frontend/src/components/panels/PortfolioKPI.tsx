@@ -2,8 +2,9 @@ import { useState } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import type { OptimizerResult, PortfolioKPIs, HistoryEntry } from '../../types'
+import type { OptimizerResult, PortfolioKPIs, HistoryEntry, FabnMarketPoint } from '../../types'
 import { stubKPIs } from '../../data/stubs'
+import FabnMarketChart from './FabnMarketChart'
 
 interface Props {
   date:              string
@@ -11,6 +12,8 @@ interface Props {
   optimizerLoading?: boolean
   history?:          HistoryEntry[]
   appliedTxnCost?:   number
+  fabnMarketHistory?: FabnMarketPoint[]
+  gammaW?:           number
 }
 
 interface MetricProps {
@@ -175,7 +178,10 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
   )
 }
 
-export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, history = [], appliedTxnCost = 0 }: Props) {
+export default function PortfolioKPI({
+  date, optimizerResult, optimizerLoading, history = [], appliedTxnCost = 0,
+  fabnMarketHistory = [], gammaW = 0.15,
+}: Props) {
   const isOptimal = optimizerResult?.status === 'optimal'
   const [expandedKPI, setExpandedKPI] = useState<string | null>(null)
 
@@ -209,9 +215,21 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
     : 'bg-gray-800 border-gray-700 text-gray-500'
 
-  const regulatoryCapital  = isOptimal && optimizerResult ? optimizerResult.capital_cost / 0.15 : null
+  // capital_cost = gammaW * rbc_bar * RBC_val, so dividing by gammaW alone
+  // yields the required capital reserve (rbc_bar * RBC_val) directly.
+  const regulatoryCapital  = isOptimal && optimizerResult ? optimizerResult.capital_cost / gammaW : null
   const marketValue        = isOptimal && optimizerResult
     ? optimizerResult.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
+    : null
+
+  // ROE_NII / ROE_SAP — denominator = C1 usage × RBC_bar × Duration × FABN market value
+  const roe = isOptimal && optimizerResult && marketValue !== null
+    ? (() => {
+        const denom = optimizerResult.rbc_c1_usage * optimizerResult.rbc_bar * optimizerResult.duration * marketValue
+        return denom > 0
+          ? { nii: optimizerResult.spread_income / denom, sap: optimizerResult.nev / denom }
+          : null
+      })()
     : null
 
   // Modal config derived from expandedKPI
@@ -250,10 +268,65 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
       {/* Everything scrollable together */}
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
 
-        {/* ── SAP Breakdown ─────────────────────────────────────────────── */}
-        {isOptimal && optimizerResult && (
+        {/* ── 1. FABN vs Market — the client spread story ────────────────── */}
+        <SectionLabel>FABN vs Market</SectionLabel>
+        <FabnMarketChart
+          data={fabnMarketHistory}
+          creditingRate={optimizerResult ? optimizerResult.r_FABN * 100 : 3.205}
+        />
+        {fabnMarketHistory.length > 0 && (() => {
+          const last = fabnMarketHistory[fabnMarketHistory.length - 1]
+          const creditingRate = optimizerResult ? optimizerResult.r_FABN * 100 : 3.205
+          return (
+            <div className="grid grid-cols-3 gap-3">
+              <Metric
+                label="FABN Crediting Rate"
+                value={`${creditingRate.toFixed(3)}%`}
+                neutral
+                title="Fixed rate paid to FABN holders (funding agreement crediting rate)"
+              />
+              <Metric
+                label="Current FABN YTM"
+                value={`${last.fabn_ytm.toFixed(2)}%`}
+                neutral live
+                sublabel={last.date}
+                title="Most recent FABN yield to maturity from Bloomberg market data"
+              />
+              <Metric
+                label="Current Spread to Treasury"
+                value={`${last.spread_bps.toFixed(0)} bps`}
+                valueColor="text-emerald-400"
+                live
+                sublabel={last.date}
+                title="FABN YTM minus benchmark Treasury YTM — the client's spread pickup vs risk-free"
+              />
+            </div>
+          )
+        })()}
+        <div className="border-t border-gray-800" />
+
+        {/* ── 2. Return on Equity — the LP/investor view ──────────────────── */}
+        <SectionLabel>Return on Equity — LP View</SectionLabel>
+        {isOptimal && optimizerResult && roe && (
           <>
-            <SectionLabel>SAP Breakdown</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <Metric
+                label="ROE (NII)"
+                value={`${(roe.nii * 100).toFixed(1)}%`}
+                valueColor="text-emerald-400"
+                live
+                sublabel="NII / (C1 × RegFactor × Dur × Balance)"
+                title="ROE_NII = Statutory NII ÷ (C1 usage × RBC_bar × Duration × FABN market value)"
+              />
+              <Metric
+                label="ROE (SAP)"
+                value={`${(roe.sap * 100).toFixed(1)}%`}
+                valueColor="text-amber-400"
+                live
+                sublabel="SAP Obj / (C1 × RegFactor × Dur × Balance)"
+                title="ROE_SAP = SAP Objective ÷ (C1 usage × RBC_bar × Duration × FABN market value)"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Metric
                 label="Statutory NII"
@@ -263,13 +336,6 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
                 title="Annual net interest income = Σ(book_yield_i − r_FABN) × h_i"
               />
               <Metric
-                label="Regulatory Capital"
-                value={`$${regulatoryCapital !== null ? (regulatoryCapital / 1e6).toFixed(1) : '—'}M`}
-                valueColor="text-blue-400"
-                sublabel="required reserve"
-                title="Required capital = capital_cost ÷ WACC (0.15) = RBC_bar × Σ(theta_i × h_i)"
-              />
-              <Metric
                 label="SAP Objective"
                 value={`$${(optimizerResult.nev / 1e6).toFixed(2)}M`}
                 valueColor="text-amber-400"
@@ -277,18 +343,36 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
                 title="Maximised quantity: NII − capital_cost − turnover − liquidity_penalty + savings"
               />
               <Metric
-                label="Trading Cost"
-                value={appliedTxnCost > 0 ? `−${formatValue(appliedTxnCost)}` : '$0'}
-                valueColor="text-red-400"
-                sublabel={`optimizer suggests: −${formatValue(optimizerResult.txn_cost)}`}
-                title="Cumulative bid-ask spread cost of trades you have actually applied this session."
+                label="C1 (RBC Usage)"
+                value={`${(optimizerResult.rbc_c1_usage * 100).toFixed(2)}%`}
+                neutral live
+                title="C1 capital charge as % of portfolio: Σ(theta_i × h_i) / H"
+              />
+              <Metric
+                label="Avg Spread"
+                value={optimizerResult.spread_bps.toFixed(1)} unit="bps"
+                neutral live
+                title="Weighted-average OAS spread of the selected bonds"
+              />
+              <Metric
+                label="Regulatory Capital"
+                value={`$${regulatoryCapital !== null ? (regulatoryCapital / 1e6).toFixed(1) : '—'}M`}
+                valueColor="text-blue-400"
+                sublabel="required reserve"
+                title={`Required capital = capital_cost ÷ γ (${gammaW}) = RBC_bar (${optimizerResult.rbc_bar}) × Σ(theta_i × h_i)`}
+              />
+              <Metric
+                label="Reg Factor"
+                value={optimizerResult.rbc_bar.toFixed(1)} unit="×"
+                neutral
+                title="RBC solvency multiplier (minimum required-capital ratio)"
               />
             </div>
             <div className="border-t border-gray-800" />
           </>
         )}
 
-        {/* ── Portfolio Metrics ──────────────────────────────────────────── */}
+        {/* ── 3. Portfolio Metrics — the issuer/portfolio view ─────────────── */}
         <SectionLabel>Portfolio Metrics</SectionLabel>
         <div className="grid grid-cols-2 gap-3">
           <Metric
@@ -364,53 +448,16 @@ export default function PortfolioKPI({ date, optimizerResult, optimizerLoading, 
             neutral live={isOptimal}
             title="C1 capital charge as % of portfolio: Σ(theta_i × h_i) / H"
           />
+          {isOptimal && optimizerResult && (
+            <Metric
+              label="Trading Cost"
+              value={appliedTxnCost > 0 ? `−${formatValue(appliedTxnCost)}` : '$0'}
+              valueColor="text-red-400"
+              sublabel={`optimizer suggests: −${formatValue(optimizerResult.txn_cost)}`}
+              title="Cumulative bid-ask spread cost of trades you have actually applied this session."
+            />
+          )}
         </div>
-
-        {/* ── FABN vs Market (Client View) ───────────────────────────────── */}
-        {isOptimal && optimizerResult && (() => {
-          const rFABN        = optimizerResult.r_FABN
-          const rFloat       = optimizerResult.r_float
-          const spreadBps    = (rFABN - rFloat) * 10_000
-          const niiMarginBps = (optimizerResult.yield_pct / 100 - rFABN) * 10_000
-          return (
-            <>
-              <div className="border-t border-gray-800" />
-              <SectionLabel>FABN vs Market — Client View</SectionLabel>
-              <div className="grid grid-cols-2 gap-3">
-                <Metric
-                  label="FABN Crediting Rate"
-                  value={`${(rFABN * 100).toFixed(3)}%`}
-                  neutral live
-                  title="Fixed rate paid to FABN holders (funding agreement crediting rate)"
-                />
-                <Metric
-                  label="3M Treasury (Benchmark)"
-                  value={`${(rFloat * 100).toFixed(3)}%`}
-                  neutral live
-                  title="3-month Treasury rate from FRED — money market / risk-free benchmark"
-                />
-                <Metric
-                  label="Client Spread to Treasury"
-                  value={`${spreadBps >= 0 ? '+' : ''}${spreadBps.toFixed(1)} bps`}
-                  valueColor={spreadBps >= 0 ? 'text-emerald-400' : 'text-amber-400'}
-                  live
-                  sublabel={spreadBps < 0 ? 'Below money market rate' : 'Above money market rate'}
-                  title={spreadBps >= 0
-                    ? 'FABN is pricing above 3M Treasury — accretive to clients vs risk-free'
-                    : 'FABN crediting rate is below 3M Treasury — FABN is pricing below money market'}
-                />
-                <Metric
-                  label="Insurer NII Margin"
-                  value={`${niiMarginBps >= 0 ? '+' : ''}${niiMarginBps.toFixed(1)} bps`}
-                  valueColor={niiMarginBps >= 0 ? 'text-emerald-400' : 'text-red-400'}
-                  live
-                  sublabel="book yield − r_FABN"
-                  title="Portfolio yield minus FABN crediting rate — insurer's net interest margin before capital costs"
-                />
-              </div>
-            </>
-          )
-        })()}
 
       </div>
 
