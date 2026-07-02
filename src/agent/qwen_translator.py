@@ -12,12 +12,12 @@ import os
 import re
 from typing import Any, Optional
 
-from agent.prompts import SYSTEM_PROMPT
+from agent.prompts import CONTRIBUTION_NARRATIVE_PROMPT, SYSTEM_PROMPT
 from agent.schemas import AgentTurn
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
+DEFAULT_MODEL_ID = "Qwen/Qwen2.5-72B-Instruct"
 
 
 class TranslationError(Exception):
@@ -55,6 +55,18 @@ def _completion_content(response: Any) -> str:
         return response.choices[0].message.content or ""
     except (AttributeError, IndexError, TypeError) as exc:
         raise TranslationError(f"unexpected Inference API response: {response!r}") from exc
+
+
+def generate_narrative(context_json: str) -> str:
+    """Call Qwen to produce a plain-text narrative summary of contribution analysis output."""
+    from huggingface_hub import InferenceClient
+
+    client = InferenceClient(model=_model_id(), token=_hf_token())
+    prompt = CONTRIBUTION_NARRATIVE_PROMPT.format(context_json=context_json)
+    messages = [{"role": "user", "content": prompt}]
+    logger.info("HF inference narrative model=%s", _model_id())
+    response = client.chat_completion(messages=messages, max_tokens=256, temperature=0)
+    return _completion_content(response).strip()
 
 
 def translate_with_qwen(
