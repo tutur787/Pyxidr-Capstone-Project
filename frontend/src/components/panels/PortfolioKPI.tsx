@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import type { OptimizerResult, PortfolioKPIs, HistoryEntry, FabnMarketPoint } from '../../types'
 import { stubKPIs } from '../../data/stubs'
-import FabnMarketChart from './FabnMarketChart'
+import FabnMarketChart, { findPointForDate } from './FabnMarketChart'
 
 interface Props {
   date:              string
@@ -32,33 +32,33 @@ interface MetricProps {
 
 function Metric({ label, value, change, unit, neutral, live, onClick, expanded, title, sublabel, valueColor }: MetricProps) {
   const textColor = valueColor ?? (
-    neutral ? 'text-gray-300' : change !== undefined
+    neutral ? 'text-text-secondary' : change !== undefined
       ? change >= 0 ? 'text-emerald-400' : 'text-red-400'
-      : 'text-gray-300'
+      : 'text-text-secondary'
   )
 
   return (
     <div
       onClick={onClick}
       title={title}
-      className={`bg-gray-800/60 rounded-xl p-4 border transition-colors
-        ${onClick ? 'cursor-pointer hover:border-amber-500/40' : 'hover:border-gray-600'}
-        ${expanded ? 'border-amber-500/40' : 'border-gray-700/50'}`}
+      className={`bg-surface-2/60 rounded-2xl p-4 border transition-colors
+        ${onClick ? 'cursor-pointer hover:border-amber-500/40' : 'hover:border-border-strong'}
+        ${expanded ? 'border-amber-500/40' : 'border-border/50'}`}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-gray-500 text-xs uppercase tracking-wider">{label}</p>
+        <p className="text-text-muted text-xs uppercase tracking-wider">{label}</p>
         <div className="flex items-center gap-1.5">
           {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 opacity-70" title="Live from optimizer" />}
           {onClick && (
-            <span className={`text-gray-600 text-xs transition-transform ${expanded ? 'rotate-180' : ''}`}>▾</span>
+            <span className={`text-text-muted text-xs transition-transform ${expanded ? 'rotate-180' : ''}`}>▾</span>
           )}
         </div>
       </div>
       <div className="flex items-baseline gap-1.5">
         <span className={`text-xl font-mono font-semibold ${textColor}`}>{value}</span>
-        {unit && <span className="text-gray-500 text-xs">{unit}</span>}
+        {unit && <span className="text-text-muted text-xs">{unit}</span>}
       </div>
-      {sublabel && <p className="text-gray-600 text-[10px] mt-0.5">{sublabel}</p>}
+      {sublabel && <p className="text-text-muted text-[10px] mt-0.5">{sublabel}</p>}
       {change !== undefined && !valueColor && (
         <p className={`text-xs mt-1 ${change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
           {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
@@ -69,7 +69,7 @@ function Metric({ label, value, change, unit, neutral, live, onClick, expanded, 
 }
 
 function SectionLabel({ children }: { children: string }) {
-  return <p className="text-gray-600 text-xs uppercase tracking-wider pt-1">{children}</p>
+  return <p className="text-text-muted text-xs uppercase tracking-wider pt-1">{children}</p>
 }
 
 function formatValue(n: number): string {
@@ -102,25 +102,25 @@ function EvolutionModal({ title, data, dataKey, formatter, annotation, onClose }
       onClick={onClose}
     >
       <div
-        className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-[520px] shadow-2xl"
+        className="bg-surface-1 border border-border rounded-3xl p-6 w-[520px] shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-white font-semibold text-sm">{title}</h3>
+          <h3 className="text-text-primary font-semibold text-sm">{title}</h3>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors text-lg leading-none"
+            className="text-text-muted hover:text-text-primary transition-colors text-lg leading-none"
           >
             ✕
           </button>
         </div>
         {annotation && (
-          <p className="text-gray-500 text-xs mb-4">{annotation}</p>
+          <p className="text-text-muted text-xs mb-4">{annotation}</p>
         )}
 
         {data.length < 2 ? (
           <div className="h-40 flex items-center justify-center">
-            <p className="text-gray-600 text-sm">Visit more dates to see the evolution chart</p>
+            <p className="text-text-muted text-sm">Visit more dates to see the evolution chart</p>
           </div>
         ) : (
           <div className="h-48 mt-4">
@@ -206,14 +206,14 @@ export default function PortfolioKPI({
 
   // Live replacements for stub fields
   const liveYtdReturn = isOptimal ? optimizerResult!.yield_pct * ytdFraction(date) : null
-  const liveCvar      = isOptimal ? optimizerResult!.duration * 2.0 : null
+  const liveCvar      = isOptimal ? optimizerResult!.cvar_pct : null
   const liveCapEff    = isOptimal ? optimizerResult!.rbc_ratio : null
 
   const loading = optimizerLoading ?? false
 
   const badgeClass = isOptimal
     ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-    : 'bg-gray-800 border-gray-700 text-gray-500'
+    : 'bg-surface-2 border-border text-text-muted'
 
   // capital_cost = gammaW * rbc_bar * RBC_val, so dividing by gammaW alone
   // yields the required capital reserve (rbc_bar * RBC_val) directly.
@@ -248,12 +248,12 @@ export default function PortfolioKPI({
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 flex flex-col h-full">
+    <div className="bg-surface-1 rounded-2xl border border-border p-5 flex flex-col h-full">
       {/* Panel header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div>
-          <h2 className="text-white font-semibold text-sm tracking-wide">Portfolio KPI</h2>
-          <p className="text-gray-500 text-xs mt-0.5">
+          <h2 className="text-text-primary font-semibold text-sm tracking-wide">Portfolio KPI</h2>
+          <p className="text-text-muted text-xs mt-0.5">
             FABN Spread Portfolio{isOptimal ? ` · ${date}` : ''}
           </p>
         </div>
@@ -270,40 +270,45 @@ export default function PortfolioKPI({
 
         {/* ── 1. FABN vs Market — the client spread story ────────────────── */}
         <SectionLabel>FABN vs Market</SectionLabel>
-        <FabnMarketChart
-          data={fabnMarketHistory}
-          creditingRate={optimizerResult ? optimizerResult.r_FABN * 100 : 3.205}
-        />
-        {fabnMarketHistory.length > 0 && (() => {
-          const last = fabnMarketHistory[fabnMarketHistory.length - 1]
-          const creditingRate = optimizerResult ? optimizerResult.r_FABN * 100 : 3.205
+        {(() => {
+          const creditingRateBps = (optimizerResult ? optimizerResult.r_FABN : 0.03205) * 10_000
+          const current = findPointForDate(fabnMarketHistory, date)
           return (
-            <div className="grid grid-cols-3 gap-3">
-              <Metric
-                label="FABN Crediting Rate"
-                value={`${creditingRate.toFixed(3)}%`}
-                neutral
-                title="Fixed rate paid to FABN holders (funding agreement crediting rate)"
+            <>
+              <FabnMarketChart
+                data={fabnMarketHistory}
+                creditingRate={creditingRateBps}
+                selectedDate={date}
               />
-              <Metric
-                label="Current FABN YTM"
-                value={`${last.fabn_ytm.toFixed(2)}%`}
-                neutral live
-                sublabel={last.date}
-                title="Most recent FABN yield to maturity from Bloomberg market data"
-              />
-              <Metric
-                label="Current Spread to Treasury"
-                value={`${last.spread_bps.toFixed(0)} bps`}
-                valueColor="text-emerald-400"
-                live
-                sublabel={last.date}
-                title="FABN YTM minus benchmark Treasury YTM — the client's spread pickup vs risk-free"
-              />
-            </div>
+              {current && (
+                <div className="grid grid-cols-3 gap-3">
+                  <Metric
+                    label="FABN Crediting Rate"
+                    value={`${creditingRateBps.toFixed(0)} bps`}
+                    neutral
+                    title="Fixed rate paid to FABN holders (funding agreement crediting rate)"
+                  />
+                  <Metric
+                    label="FABN YTM"
+                    value={`${(current.fabn_ytm * 100).toFixed(0)} bps`}
+                    neutral live
+                    sublabel={current.date}
+                    title="FABN yield to maturity from Bloomberg market data, as of the selected date"
+                  />
+                  <Metric
+                    label="Spread to Treasury"
+                    value={`${current.spread_bps.toFixed(0)} bps`}
+                    valueColor="text-brand-highlight"
+                    live
+                    sublabel={current.date}
+                    title="FABN YTM minus benchmark Treasury YTM — the client's spread pickup vs risk-free, as of the selected date"
+                  />
+                </div>
+              )}
+            </>
           )
         })()}
-        <div className="border-t border-gray-800" />
+        <div className="border-t border-border" />
 
         {/* ── 2. Return on Equity — the LP/investor view ──────────────────── */}
         <SectionLabel>Return on Equity — LP View</SectionLabel>
@@ -313,7 +318,7 @@ export default function PortfolioKPI({
               <Metric
                 label="ROE (NII)"
                 value={`${(roe.nii * 100).toFixed(1)}%`}
-                valueColor="text-emerald-400"
+                valueColor="text-brand"
                 live
                 sublabel="NII / (C1 × RegFactor × Dur × Balance)"
                 title="ROE_NII = Statutory NII ÷ (C1 usage × RBC_bar × Duration × FABN market value)"
@@ -321,7 +326,7 @@ export default function PortfolioKPI({
               <Metric
                 label="ROE (SAP)"
                 value={`${(roe.sap * 100).toFixed(1)}%`}
-                valueColor="text-amber-400"
+                valueColor="text-brand-highlight"
                 live
                 sublabel="SAP Obj / (C1 × RegFactor × Dur × Balance)"
                 title="ROE_SAP = SAP Objective ÷ (C1 usage × RBC_bar × Duration × FABN market value)"
@@ -331,14 +336,14 @@ export default function PortfolioKPI({
               <Metric
                 label="Statutory NII"
                 value={`$${(optimizerResult.spread_income / 1e6).toFixed(2)}M`}
-                valueColor="text-emerald-400"
+                valueColor="text-brand"
                 live
                 title="Annual net interest income = Σ(book_yield_i − r_FABN) × h_i"
               />
               <Metric
                 label="SAP Objective"
                 value={`$${(optimizerResult.nev / 1e6).toFixed(2)}M`}
-                valueColor="text-amber-400"
+                valueColor="text-brand-highlight"
                 live
                 title="Maximised quantity: NII − capital_cost − turnover − liquidity_penalty + savings"
               />
@@ -357,7 +362,7 @@ export default function PortfolioKPI({
               <Metric
                 label="Regulatory Capital"
                 value={`$${regulatoryCapital !== null ? (regulatoryCapital / 1e6).toFixed(1) : '—'}M`}
-                valueColor="text-blue-400"
+                valueColor="text-text-secondary"
                 sublabel="required reserve"
                 title={`Required capital = capital_cost ÷ γ (${gammaW}) = RBC_bar (${optimizerResult.rbc_bar}) × Σ(theta_i × h_i)`}
               />
@@ -368,7 +373,7 @@ export default function PortfolioKPI({
                 title="RBC solvency multiplier (minimum required-capital ratio)"
               />
             </div>
-            <div className="border-t border-gray-800" />
+            <div className="border-t border-border" />
           </>
         )}
 
@@ -416,11 +421,22 @@ export default function PortfolioKPI({
           />
           <Metric
             label="CVaR (95%)"
-            value={liveCvar !== null ? `${liveCvar.toFixed(2)}%` : `${kpis.cvar_pct.toFixed(2)}%`}
+            value={liveCvar != null ? `${liveCvar.toFixed(2)}%` : `${kpis.cvar_pct.toFixed(2)}%`}
             change={-(liveCvar ?? kpis.cvar_pct)}
-            live={isOptimal}
-            sublabel="≈ 200 bps shock"
-            title="Market-value drop at 200 bps parallel rate shock (duration × 2%). Analytical approximation."
+            live={isOptimal && liveCvar != null}
+            valueColor={isOptimal && optimizerResult?.cvar_degraded ? 'text-amber-500' : undefined}
+            sublabel={
+              isOptimal && optimizerResult
+                ? liveCvar != null
+                  ? `${optimizerResult.cvar_n_obs} days${optimizerResult.cvar_degraded ? ' · low sample' : ''}`
+                  : 'insufficient history'
+                : '≈ 200 bps shock (stub)'
+            }
+            title={
+              isOptimal
+                ? `Historical-simulation CVaR, scaled to a 1-quarter horizon: expected market-value loss in the worst 5% of daily FABN yield moves (${optimizerResult?.cvar_n_obs ?? 0} historical days), duration-mapped to this portfolio.${optimizerResult?.cvar_degraded ? ' Fewer than 60 observations available — treat as indicative only.' : ''}`
+                : 'Market-value drop at 200 bps parallel rate shock (duration × 2%). Stub placeholder — run the optimizer for the real historical-simulation CVaR.'
+            }
           />
           <Metric
             label="Capital Eff."

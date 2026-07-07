@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import HyperparamSidebar from '../sidebar/HyperparamSidebar'
+import SettingsModal from '../modals/SettingsModal'
 import type { HyperParams, Fabn } from '../../types'
 import { DATE_MIN, DATE_MAX } from '../../data/stubs'
 
@@ -57,21 +58,21 @@ function CalendarPopover({
   })()
 
   return (
-    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-3 z-[200] w-72">
+    <div className="glass absolute top-full mt-2 left-1/2 -translate-x-1/2 border border-border rounded-2xl shadow-2xl p-3 z-[200] w-72">
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={() => shiftMonth(-1)}
           disabled={prevMonthFirstISO < DATE_MIN.slice(0, 8) + '01' && `${year}-${String(month).padStart(2,'0')}` <= DATE_MIN.slice(0, 7)}
-          className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded hover:bg-gray-700 transition-colors text-sm font-bold"
+          className="text-text-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded-full hover:bg-surface-2 transition-colors text-sm font-bold"
         >
           ←
         </button>
-        <span className="text-white text-sm font-mono font-medium">{monthLabel}</span>
+        <span className="text-text-primary text-sm font-mono font-medium">{monthLabel}</span>
         <button
           onClick={() => shiftMonth(1)}
           disabled={nextMonthLastISO > DATE_MAX}
-          className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded hover:bg-gray-700 transition-colors text-sm font-bold"
+          className="text-text-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded-full hover:bg-surface-2 transition-colors text-sm font-bold"
         >
           →
         </button>
@@ -80,7 +81,7 @@ function CalendarPopover({
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAY_LABELS.map(d => (
-          <div key={d} className="text-gray-600 text-xs text-center py-0.5">{d}</div>
+          <div key={d} className="text-text-muted text-xs text-center py-0.5">{d}</div>
         ))}
       </div>
 
@@ -102,12 +103,12 @@ function CalendarPopover({
               key={day}
               disabled={isDisabled}
               onClick={() => onSelect(iso)}
-              className={`text-xs rounded py-1.5 w-full text-center transition-colors
+              className={`text-xs rounded-full py-1.5 w-full text-center transition-colors
                 ${isSelected
-                  ? 'bg-amber-500 text-gray-900 font-bold'
+                  ? 'bg-brand text-white font-bold'
                   : isDisabled
-                    ? 'text-gray-700 cursor-not-allowed'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                    ? 'text-text-muted opacity-40 cursor-not-allowed'
+                    : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'}`}
             >
               {day}
             </button>
@@ -115,7 +116,7 @@ function CalendarPopover({
         })}
       </div>
 
-      <p className="text-gray-600 text-xs text-center mt-3">
+      <p className="text-text-muted text-xs text-center mt-3">
         Range: {DATE_MIN} → {DATE_MAX}
       </p>
     </div>
@@ -132,6 +133,7 @@ export default function Header({
   const [profileOpen, setProfileOpen] = useState(false)
   const [fabnOpen, setFabnOpen] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Click-outside for FABN dropdown
   const fabnRef = useRef<HTMLDivElement>(null)
@@ -191,74 +193,87 @@ export default function Header({
 
   return (
     <>
-      <header className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 z-30 relative">
+      <header className="glass flex items-center justify-between px-4 py-3 border-b border-border z-30 relative">
         {/* Left: burger + FABN selector */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="flex flex-col gap-1.5 p-2 rounded-lg hover:bg-gray-800 transition-colors group"
+            className="flex flex-col gap-1.5 p-2 rounded-full hover:bg-surface-2 transition-colors group"
             aria-label="Open parameters"
           >
-            <span className="block w-5 h-0.5 bg-gray-400 group-hover:bg-amber-400 transition-colors" />
-            <span className="block w-5 h-0.5 bg-gray-400 group-hover:bg-amber-400 transition-colors" />
-            <span className="block w-5 h-0.5 bg-gray-400 group-hover:bg-amber-400 transition-colors" />
+            <span className="block w-5 h-0.5 bg-text-muted group-hover:bg-brand transition-colors" />
+            <span className="block w-5 h-0.5 bg-text-muted group-hover:bg-brand transition-colors" />
+            <span className="block w-5 h-0.5 bg-text-muted group-hover:bg-brand transition-colors" />
           </button>
 
           {/* FABN selector */}
           <div className="relative" ref={fabnRef}>
             <button
               onClick={() => setFabnOpen(o => !o)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors group"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-surface-2 transition-colors group"
               aria-label="Select FABN"
             >
-              <span className="text-amber-400 text-lg group-hover:text-amber-300 transition-colors">▦</span>
+              <span className="text-brand text-lg group-hover:text-brand-hover transition-colors">▦</span>
               <div className="text-left hidden sm:block max-w-[260px]">
-                <p className="text-white font-semibold text-sm leading-none font-mono truncate">{fabnLabel}</p>
+                <p className="text-text-primary font-semibold text-sm leading-none font-mono truncate">{fabnLabel}</p>
                 {fabnSub && (
-                  <p className="text-gray-500 text-xs mt-0.5 font-mono truncate">{fabnSub}</p>
+                  <p className="text-text-muted text-xs mt-0.5 font-mono truncate">{fabnSub}</p>
                 )}
               </div>
-              <span className="text-gray-500 text-xs ml-1">▾</span>
+              <span className="text-text-muted text-xs ml-1">▾</span>
             </button>
 
             {fabnOpen && (
-              <div className="absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl py-2 z-[200] max-h-72 overflow-y-auto">
-                <div className="px-4 py-1.5 border-b border-gray-700 mb-1 flex items-center justify-between">
-                  <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Select FABNs</p>
+              <div className="glass absolute left-0 top-full mt-2 w-80 border border-border rounded-2xl shadow-2xl py-2 z-[200] max-h-72 overflow-y-auto">
+                <div className="px-4 py-1.5 border-b border-border mb-1 flex items-center justify-between">
+                  <p className="text-text-muted text-xs font-semibold uppercase tracking-wider">Select FABNs</p>
                   {selectedFabns.length > 0 && (
                     <button
                       onClick={() => onFabnChange([])}
-                      className="text-gray-600 hover:text-gray-400 text-xs transition-colors"
+                      className="text-text-muted hover:text-text-secondary text-xs transition-colors"
                     >
                       Clear all
                     </button>
                   )}
                 </div>
                 {fabns.map(f => {
-                  const checked = selectedFabns.some(s => s.cusip === f.cusip)
+                  const checked   = selectedFabns.some(s => s.cusip === f.cusip)
+                  const comingSoon = f.status === 'coming_soon'
                   return (
                     <button
                       key={f.cusip}
-                      onClick={() => toggleFabn(f)}
-                      className={`w-full text-left px-4 py-2.5 hover:bg-gray-700 transition-colors flex items-start gap-3
-                        ${checked ? 'bg-amber-500/10' : ''}`}
+                      onClick={() => !comingSoon && toggleFabn(f)}
+                      disabled={comingSoon}
+                      className={`w-full text-left px-4 py-2.5 transition-colors flex items-start gap-3
+                        ${comingSoon ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-2'}
+                        ${checked ? 'bg-brand/10' : ''}`}
                     >
-                      <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center
-                        ${checked ? 'bg-amber-500 border-amber-500' : 'border-gray-600'}`}>
-                        {checked && <span className="text-gray-900 text-xs font-bold leading-none">✓</span>}
-                      </div>
+                      {comingSoon ? (
+                        <div className="mt-0.5 w-4 h-4 flex-shrink-0" />
+                      ) : (
+                        <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border flex items-center justify-center
+                          ${checked ? 'bg-brand border-brand' : 'border-border-strong'}`}>
+                          {checked && <span className="text-white text-xs font-bold leading-none">✓</span>}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className={`font-mono text-sm font-semibold ${checked ? 'text-amber-400' : 'text-white'}`}>
+                          <p className={`font-mono text-sm font-semibold ${checked ? 'text-brand' : 'text-text-primary'}`}>
                             {f.cusip}
                           </p>
-                          <p className="text-gray-500 text-xs mt-0.5 truncate">{f.sector}</p>
+                          <p className="text-text-muted text-xs mt-0.5 truncate">{f.sector}</p>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="text-gray-300 text-xs">{f.maturity ? f.maturity.slice(0, 10) : ''}</p>
-                          <p className="text-gray-500 text-xs mt-0.5">
-                            {f.rating}{f.coupon != null ? ` · ${(f.coupon * 100).toFixed(2)}%` : ''}
-                          </p>
+                          {comingSoon ? (
+                            <span className="text-text-muted text-xs px-2 py-0.5 rounded-full border border-border">Coming soon</span>
+                          ) : (
+                            <>
+                              <p className="text-text-secondary text-xs">{f.maturity ? f.maturity.slice(0, 10) : ''}</p>
+                              <p className="text-text-muted text-xs mt-0.5">
+                                {f.rating}{f.coupon != null ? ` · ${(f.coupon * 100).toFixed(2)}%` : ''}
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -271,12 +286,12 @@ export default function Header({
 
         {/* Center: date navigator + calendar popover */}
         <div className="relative" ref={calendarRef}>
-          <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-2 border border-gray-700">
+          <div className="flex items-center gap-2 bg-surface-1 rounded-2xl px-4 py-2 border border-border">
             {/* One-day back */}
             <button
               onClick={() => onAdvance(-1)}
               disabled={isAtMin}
-              className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
+              className="text-text-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full hover:bg-surface-2"
             >
               ←
             </button>
@@ -284,18 +299,18 @@ export default function Header({
             {/* Calendar toggle — clicking the emoji or date text opens the picker */}
             <button
               onClick={() => setShowCalendar(v => !v)}
-              className="flex items-center gap-2 min-w-[140px] justify-center rounded-lg px-1 py-0.5 hover:bg-gray-700 transition-colors"
+              className="flex items-center gap-2 min-w-[140px] justify-center rounded-full px-1 py-0.5 hover:bg-surface-2 transition-colors"
               title="Click to open calendar"
             >
-              <span className={`text-xs transition-colors ${showCalendar ? 'text-amber-300' : 'text-amber-400'}`}>📅</span>
-              <span className="text-white font-mono text-sm font-medium">{formattedDate}</span>
+              <span className={`text-xs transition-colors ${showCalendar ? 'text-brand-hover' : 'text-brand'}`}>📅</span>
+              <span className="text-text-primary font-mono text-sm font-medium">{formattedDate}</span>
             </button>
 
             {/* One-day forward */}
             <button
               onClick={() => onAdvance(1)}
               disabled={isAtMax}
-              className="text-gray-400 hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded hover:bg-gray-700"
+              className="text-text-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full hover:bg-surface-2"
             >
               →
             </button>
@@ -313,33 +328,36 @@ export default function Header({
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setProfileOpen(p => !p)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-800 transition-colors border border-transparent hover:border-gray-700"
+            className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-surface-2 transition-colors border border-transparent hover:border-border"
           >
-            <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-gray-900 font-bold text-sm">
+            <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm">
               J
             </div>
             <div className="hidden sm:block text-left">
-              <p className="text-white text-sm font-medium leading-none">John Doe</p>
-              <p className="text-gray-500 text-xs mt-0.5">Portfolio Manager</p>
+              <p className="text-text-primary text-sm font-medium leading-none">John Doe</p>
+              <p className="text-text-muted text-xs mt-0.5">Portfolio Manager</p>
             </div>
-            <span className="text-gray-500 text-xs ml-1">▾</span>
+            <span className="text-text-muted text-xs ml-1">▾</span>
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 top-full mt-2 w-52 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl py-2 z-[200]">
-              <div className="px-4 py-2 border-b border-gray-700">
-                <p className="text-white text-sm font-medium">John Doe</p>
-                <p className="text-gray-400 text-xs">johndoe@example.com</p>
+            <div className="glass absolute right-0 top-full mt-2 w-52 border border-border rounded-2xl shadow-2xl py-2 z-[200]">
+              <div className="px-4 py-2 border-b border-border">
+                <p className="text-text-primary text-sm font-medium">John Doe</p>
+                <p className="text-text-secondary text-xs">johndoe@example.com</p>
               </div>
               <div className="px-4 py-2">
-                <p className="text-gray-500 text-xs">Simulated date</p>
-                <p className="text-amber-400 text-xs font-mono">{date}</p>
+                <p className="text-text-muted text-xs">Simulated date</p>
+                <p className="text-brand text-xs font-mono">{date}</p>
               </div>
-              <div className="px-2 pt-1 border-t border-gray-700">
-                <button className="w-full text-left px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg text-sm transition-colors">
+              <div className="px-2 pt-1 border-t border-border">
+                <button
+                  onClick={() => { setSettingsOpen(true); setProfileOpen(false) }}
+                  className="w-full text-left px-2 py-1.5 text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-xl text-sm transition-colors"
+                >
                   Settings
                 </button>
-                <button className="w-full text-left px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg text-sm transition-colors">
+                <button className="w-full text-left px-2 py-1.5 text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-xl text-sm transition-colors">
                   Sign out
                 </button>
               </div>
@@ -355,6 +373,8 @@ export default function Header({
         onChange={onHyperParamsChange}
         onApply={onApply}
       />
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </>
   )
 }

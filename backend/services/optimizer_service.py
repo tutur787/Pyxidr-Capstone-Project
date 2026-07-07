@@ -29,6 +29,8 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
+from services import risk_service
+
 logger = logging.getLogger(__name__)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -133,10 +135,11 @@ def run(
     eps_D:    float = 0.3,    # duration gap tolerance (years)
     w_max:    float = 0.05,
     n_min:    int   = 20,
+    vol_percentile: float = risk_service.DEFAULT_PERCENTILE,  # trading-signal threshold percentile
 ) -> dict:
     """Run the FABN SAP optimizer for a given date and hyperparameters."""
     try:
-        return _solve(date, gamma_w, lambda_w, eps_D, w_max, n_min)
+        return _solve(date, gamma_w, lambda_w, eps_D, w_max, n_min, vol_percentile)
     except Exception as exc:
         logger.exception("Optimizer failed for date=%s", date)
         return {"status": "error", "date": date, "error": str(exc)}
@@ -153,6 +156,7 @@ def _solve(
     eps_D:    float,
     w_max:    float,
     n_min:    int,
+    vol_percentile: float = risk_service.DEFAULT_PERCENTILE,
 ) -> dict:
     import gurobipy as gp
     from gurobipy import GRB
@@ -523,6 +527,9 @@ def _solve(
         }
         for k in range(K)
     ]
+    swap_notional_total = float(v_opt.sum())
+    swap_cap_notional    = float(v_max_frac * H)
+    swap_c3_capital_cost = float(lambda_cap * mu_swap * swap_notional_total)
 
     # ── 5. IMR schedule ────────────────────────────────────────────────────
     # For each SELL trade, realized gain enters the IMR and amortizes over
@@ -575,6 +582,24 @@ def _solve(
         "n_bonds":      n_eligible,
     }
 
+    # ── 7. Risk analytics — CVaR + trading signal, both from the FABN YTM history ──
+    cvar           = risk_service.compute_cvar(date, float(D_avg))
+    trading_signal = risk_service.compute_trading_signal(date, percentile=vol_percentile)
+
+    sector_weights: dict[str, float] = {}
+    for a in alloc_list:
+        key = a["sector"] or "Unclassified"
+        sector_weights[key] = sector_weights.get(key, 0.0) + a["weight"]
+    sector_breakdown = sorted(
+        ({"sector": s, "weight_pct": round(w * 100, 2)} for s, w in sector_weights.items()),
+        key=lambda x: -x["weight_pct"],
+    )
+    sector_concentration = {
+        "top_sector":     sector_breakdown[0]["sector"] if sector_breakdown else "",
+        "top_weight_pct": sector_breakdown[0]["weight_pct"] if sector_breakdown else 0.0,
+        "breakdown":      sector_breakdown,
+    }
+
     return {
         "status":           "optimal",
         "date":             date,
@@ -594,9 +619,18 @@ def _solve(
         "c3_cost":          round(float(savings_val), 2),            # savings income
         "txn_cost":         round(float(turnover_val), 2),
         "duration_gap":     round(float(abs(D_avg - D_FABN)), 4),
+        "duration_target":  round(float(D_FABN), 4),
         "r_FABN":           round(float(r_FABN), 6),
         "r_float":          round(float(r_float), 6),
         "rbc_bar":          round(float(RBC_bar), 4),
+        "cvar_pct":         cvar["cvar_pct"],
+        "cvar_var_pct":     cvar["var_pct"],
+        "cvar_n_obs":       cvar["n_obs"],
+        "cvar_degraded":    cvar["degraded"],
+        "cvar_method":      cvar["method"],
+        "cvar_histogram":   cvar["histogram"],
+        "trading_signal":   trading_signal,
+        "sector_concentration": sector_concentration,
         # Detail arrays
         "allocations":      alloc_list,
         "trades":           trades,
@@ -609,4 +643,7 @@ def _solve(
         "imr_contributions":  imr_contributions,
         "static_comparison":  static_comparison,
         "swap_allocations":   swap_allocations,
+        "swap_notional_total":  round(swap_notional_total, 2),
+        "swap_cap_notional":    round(swap_cap_notional, 2),
+        "swap_c3_capital_cost": round(swap_c3_capital_cost, 2),
     }

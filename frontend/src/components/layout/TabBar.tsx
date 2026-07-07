@@ -21,13 +21,13 @@ interface Props {
 
 export default function TabBar({ onTabClick }: Props) {
   return (
-    <nav className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 border-b border-gray-800">
+    <nav className="flex items-center justify-center gap-2 px-4 py-2.5 bg-surface-1 border-b border-border">
       {TABS.map(tab => (
         <button
           key={tab.id}
           onClick={() => onTabClick(tab.id)}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium text-gray-400
-            border border-gray-700 hover:border-amber-500/60 hover:text-amber-400 hover:bg-amber-500/5
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium text-text-muted
+            border border-border hover:border-amber-500/60 hover:text-amber-400 hover:bg-amber-500/5
             transition-all duration-150 active:scale-95"
         >
           {tab.star && <span className="text-amber-400 text-xs">★</span>}

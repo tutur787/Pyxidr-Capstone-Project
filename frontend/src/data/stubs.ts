@@ -45,17 +45,41 @@ export const stubNews: NewsItem[] = [
 ]
 
 export const defaultHyperParams: HyperParams = {
-  gamma_w:  0.15,   // matches pipeline calibration
-  lambda_w: 1.0,    // r_lend = r_FABN * 1.0 (no scaling)
-  eps_D:    0.3,    // matches pipeline calibration
-  w_max:    0.05,
-  n_min:    20,
+  gamma_w:        0.15,   // matches pipeline calibration
+  lambda_w:       1.0,    // r_lend = r_FABN * 1.0 (no scaling)
+  eps_D:          0.3,    // matches pipeline calibration
+  w_max:          0.05,
+  n_min:          20,
+  vol_percentile: 75,     // trading-signal trigger: top-quartile of trailing-year vol
 }
 
-export const STUB_FABNS: Fabn[] = [
-  { cusip: 'FABN1', coupon: null, maturity: '', rating: '', sector: '' },
-  { cusip: 'FABN2', coupon: null, maturity: '', rating: '', sector: '' },
-  { cusip: 'FABN3', coupon: null, maturity: '', rating: '', sector: '' },
+export const KNOWN_FABNS: Fabn[] = [
+  // The one real FABN this whole app models: ATH 3.205 03/08/27 (Athene Global Funding).
+  {
+    cusip:    '04685A3L3',
+    coupon:   0.03205,
+    maturity: '2027-03-08',
+    rating:   'A+',
+    sector:   'Athene Global Funding',
+    status:   'active',
+  },
+  // Future issuances — not modeled yet, shown as placeholders rather than omitted.
+  {
+    cusip:    'Next FABN — 2026',
+    coupon:   null,
+    maturity: '',
+    rating:   '',
+    sector:   'Not yet issued',
+    status:   'coming_soon',
+  },
+  {
+    cusip:    'Next FABN — 2027',
+    coupon:   null,
+    maturity: '',
+    rating:   '',
+    sector:   'Not yet issued',
+    status:   'coming_soon',
+  },
 ]
 
 export const DATE_MIN = '2024-03-01'

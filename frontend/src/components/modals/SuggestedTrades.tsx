@@ -65,14 +65,14 @@ function TradeCard({
   const priceDiff   = shadowPrice - mktPrice
 
   return (
-    <div className={`rounded-xl p-3.5 border flex items-start gap-3 ${
+    <div className={`rounded-2xl p-3.5 border flex items-start gap-3 ${
       isBuy
         ? 'bg-emerald-500/5 border-emerald-500/15'
         : 'bg-red-500/5 border-red-500/15'
     } ${applied ? 'opacity-60' : ''}`}>
 
       {/* Action badge */}
-      <span className={`flex-shrink-0 px-2 py-0.5 rounded-md text-xs font-bold mt-0.5 ${
+      <span className={`flex-shrink-0 px-2 py-0.5 rounded-lg text-xs font-bold mt-0.5 ${
         isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
       }`}>
         {isBuy ? '▲ BUY' : '▼ SELL'}
@@ -81,15 +81,15 @@ function TradeCard({
       {/* Details */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-white text-xs font-mono font-semibold truncate">{trade.cusip}</p>
+          <p className="text-text-primary text-xs font-mono font-semibold truncate">{trade.cusip}</p>
           <span className={`font-mono text-sm font-bold flex-shrink-0 ${
             isBuy ? 'text-emerald-400' : 'text-red-400'
           }`}>
             {fmtDelta(trade.delta_usd)}
           </span>
         </div>
-        <p className="text-gray-500 text-xs truncate mt-0.5">{trade.sector || '—'}</p>
-        <div className="flex gap-3 mt-1.5 text-xs text-gray-600 flex-wrap">
+        <p className="text-text-muted text-xs truncate mt-0.5">{trade.sector || '—'}</p>
+        <div className="flex gap-3 mt-1.5 text-xs text-text-muted flex-wrap">
           <span title="Net SAP contribution rate: NII minus capital cost, per $ invested">
             SAP <span className={`font-mono font-semibold ${trade.sap_score_bps >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
               {trade.sap_score_bps >= 0 ? '+' : ''}{trade.sap_score_bps.toFixed(1)} bps
@@ -99,16 +99,16 @@ function TradeCard({
             {trade.delta_weight_pct >= 0 ? '+' : ''}{trade.delta_weight_pct.toFixed(2)}%
           </span></span>
           <span>Sprd <span className="text-blue-400 font-mono">{trade.spread_bps.toFixed(0)} bps</span></span>
-          <span>Dur <span className="text-gray-400 font-mono">{trade.duration.toFixed(1)} yr</span></span>
-          {trade.rating && <span className="text-gray-500 font-mono">{trade.rating}</span>}
+          <span>Dur <span className="text-text-muted font-mono">{trade.duration.toFixed(1)} yr</span></span>
+          {trade.rating && <span className="text-text-muted font-mono">{trade.rating}</span>}
         </div>
         <div className="flex gap-4 mt-1.5 text-xs flex-wrap">
-          <span className="text-gray-600">
+          <span className="text-text-muted">
             Price (Mkt){' '}
-            <span className="font-mono text-gray-300">${mktPrice.toFixed(2)}</span>
+            <span className="font-mono text-text-secondary">${mktPrice.toFixed(2)}</span>
           </span>
           <span
-            className="text-gray-600"
+            className="text-text-muted"
             title="LP-implied fair value: price at which this bond's net SAP contribution = 0. Above mkt = cheap (buy); below mkt = rich (sell)."
           >
             Price (Shadow){' '}
@@ -125,7 +125,7 @@ function TradeCard({
       {/* Action button */}
       <div className="flex-shrink-0 mt-0.5">
         {applied ? (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold bg-gray-700/60 text-gray-400">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-surface-3/60 text-text-muted">
             ✓ Applied
           </span>
         ) : isBuy ? (
@@ -134,7 +134,7 @@ function TradeCard({
               onClick={handleFundedBuy}
               disabled={disabled}
               title={fundLabel}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors text-center leading-tight ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors text-center leading-tight ${
                 disabled
                   ? 'bg-emerald-500/10 text-emerald-500 cursor-not-allowed'
                   : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/40'
@@ -146,17 +146,17 @@ function TradeCard({
             </button>
           ) : (
             <span
-              className="inline-flex items-center px-2 py-1 rounded-md text-xs text-gray-600 border border-gray-700/50 cursor-default"
-              title="Apply sells first to free up capacity for this buy"
+              className="inline-flex items-center px-2 py-1 rounded-lg text-xs text-text-muted border border-border/50 cursor-default text-center leading-tight"
+              title="Apply sells (any sells, your choice) first to free up capacity for this buy"
             >
-              No sells
+              {fundLabel}
             </span>
           )
         ) : (
           <button
             onClick={handleSell}
             disabled={disabled}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
               disabled
                 ? 'bg-amber-500/10 text-amber-500 cursor-not-allowed'
                 : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/20 hover:border-amber-500/40'
@@ -184,14 +184,40 @@ function SectionHeader({ label, count, color }: { label: string; count: number; 
   )
 }
 
+function TradingSignalBanner({ result }: { result: OptimizerResult }) {
+  const { current_vol_bps, threshold_vol_bps, ratio_to_median, percentile, worth_trading, degraded } = result.trading_signal
+  if (current_vol_bps == null || worth_trading == null) return null
+  return (
+    <div
+      className={`p-3.5 rounded-2xl border flex items-center gap-3 text-xs ${
+        worth_trading ? 'bg-brand-highlight/5 border-brand-highlight/25' : 'bg-surface-2/60 border-border'
+      }`}
+      title={`Historically-driven signal (informational only): 21-day rolling volatility of the cross-sectional median book yield vs. the ${percentile.toFixed(0)}th percentile of its own trailing-year distribution — the Size-of-Prize volatility-threshold trigger. Does not gate the optimizer.`}
+    >
+      <span className={`text-base ${worth_trading ? 'text-brand-highlight' : 'text-text-muted'}`}>
+        {worth_trading ? '⚡' : '○'}
+      </span>
+      <div className="flex-1">
+        <p className={`font-semibold ${worth_trading ? 'text-brand-highlight' : 'text-text-secondary'}`}>
+          {worth_trading ? 'High volatility — worth trading' : 'Normal volatility — carry favors holding static'}
+        </p>
+        <p className="text-text-muted mt-0.5">
+          21d yield vol {current_vol_bps.toFixed(1)} bps vs {threshold_vol_bps?.toFixed(1)} bps threshold
+          ({ratio_to_median?.toFixed(2)}× median){degraded ? ' · low sample' : ''}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function SkeletonCard() {
   return (
-    <div className="rounded-xl p-3.5 border border-gray-700 bg-gray-800/40 flex items-start gap-3 animate-pulse">
-      <div className="w-14 h-6 rounded-md bg-gray-700 flex-shrink-0" />
+    <div className="rounded-2xl p-3.5 border border-border bg-surface-2/40 flex items-start gap-3 animate-pulse">
+      <div className="w-14 h-6 rounded-lg bg-surface-3 flex-shrink-0" />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 bg-gray-700 rounded w-2/5" />
-        <div className="h-2.5 bg-gray-700 rounded w-3/5" />
-        <div className="h-2 bg-gray-700 rounded w-4/5" />
+        <div className="h-3 bg-surface-3 rounded-lg w-2/5" />
+        <div className="h-2.5 bg-surface-3 rounded-lg w-3/5" />
+        <div className="h-2 bg-surface-3 rounded-lg w-4/5" />
       </div>
     </div>
   )
@@ -217,64 +243,51 @@ export default function SuggestedTrades({
     finally { setResetPending(false); setResetConfirm(false) }
   }
 
-  // Net capacity already freed by individually-applied sells (minus any applied buys).
-  // When this covers a buy's delta, the user can execute the buy without pairing new sells.
+  // Net capacity freed by individually-applied sells (minus any applied buys). Any BUY
+  // whose delta fits within this shared pool can be applied — the user picks which sells
+  // and which buys to execute, in any order, rather than the optimizer pre-pairing them.
   const netSellCapacity = Math.max(0,
     appliedTrades.filter(t => t.action === 'SELL').reduce((s, t) => s + Math.abs(t.delta_usd), 0) -
     appliedTrades.filter(t => t.action === 'BUY').reduce((s, t) => s + Math.abs(t.delta_usd), 0)
   )
 
-  // Sequential sell reservation: each BUY card claims sells exclusively so no two cards
-  // can target the same CUSIP. Falls back to "pre-funded" when the user has already
-  // applied enough individual sells to cover the buy without using fresh suggestions.
-  const reserved = new Set<string>()
   const buyFundings = buys.map(buyTrade => {
-    const available = sells.filter(s => !appliedCusips.has(s.cusip) && !reserved.has(s.cusip))
-    let covered = 0
-    const selected: Trade[] = []
-    for (const s of available) {
-      if (covered >= buyTrade.delta_usd) break
-      selected.push(s)
-      covered += Math.abs(s.delta_usd)
+    const canFund = netSellCapacity >= buyTrade.delta_usd
+    return {
+      canFund,
+      label: canFund ? 'Buy' : `Need ${fmtAbs(buyTrade.delta_usd - netSellCapacity)} more sells`,
     }
-    if (covered >= buyTrade.delta_usd) {
-      selected.forEach(s => reserved.add(s.cusip))
-      return { sellTrades: selected, canFund: true,
-               label: `Sell ${selected.length} (${fmtAbs(covered)}) → Buy` }
-    }
-    if (netSellCapacity >= buyTrade.delta_usd) {
-      // Already funded by prior individual sells — just apply the buy
-      return { sellTrades: [], canFund: true, label: 'Buy (pre-funded)' }
-    }
-    return { sellTrades: [], canFund: false, label: 'Insufficient sells' }
   })
 
   return (
     <Modal title="Suggested Trades" subtitle="Optimization-driven rebalancing recommendations" onClose={onClose}>
       <div className="space-y-5">
 
+        {/* Volatility-triggered trading signal (Size-of-Prize methodology) */}
+        {isOptimal && result && <TradingSignalBanner result={result} />}
+
         {/* Applied-trades summary strip */}
         {appliedTrades.length > 0 && (
-          <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs">
+          <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs">
             <span className="text-amber-400 font-semibold">
               {appliedTrades.length} trade{appliedTrades.length > 1 ? 's' : ''} applied this session
             </span>
-            <span className="text-gray-600 flex-1">
+            <span className="text-text-muted flex-1">
               {appliedTrades.map(a => a.cusip).join(', ')}
             </span>
             <button
               onClick={handleReset}
               disabled={resetPending}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                 resetConfirm
                   ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                  : 'bg-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-600'
+                  : 'bg-surface-3 text-text-muted hover:text-text-primary hover:bg-surface-3'
               } ${resetPending ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {resetPending ? 'Resetting…' : resetConfirm ? 'Confirm reset?' : 'Reset portfolio'}
             </button>
             {resetConfirm && !resetPending && (
-              <button onClick={() => setResetConfirm(false)} className="text-gray-600 hover:text-gray-400 transition-colors">
+              <button onClick={() => setResetConfirm(false)} className="text-text-muted hover:text-text-muted transition-colors">
                 Cancel
               </button>
             )}
@@ -282,16 +295,16 @@ export default function SuggestedTrades({
         )}
 
         {/* Status banner */}
-        <div className={`p-3.5 rounded-xl border text-xs ${
-          isOptimal ? 'bg-gray-800/60 border-gray-700' : 'bg-amber-500/5 border-amber-500/20'
+        <div className={`p-3.5 rounded-2xl border text-xs ${
+          isOptimal ? 'bg-surface-2/60 border-border' : 'bg-amber-500/5 border-amber-500/20'
         }`}>
           {isOptimal ? (
             <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-gray-400">Optimizer rebalancing vs current baseline:</span>
+              <span className="text-text-muted">Optimizer rebalancing vs current baseline:</span>
               <span className="text-emerald-400 font-semibold">{buys.length} increases</span>
               <span className="text-red-400 font-semibold">{sells.length} reductions / exits</span>
-              <span className="text-gray-600">threshold $100k · top 15 each side · ranked by SAP score</span>
-              <span className="text-gray-600 ml-auto italic">Buys auto-fund from worst-SAP sells to stay ≤ $500M</span>
+              <span className="text-text-muted">threshold $100k · top 15 each side · ranked by SAP score</span>
+              <span className="text-text-muted ml-auto italic">Apply any sells to free capacity, then any buy that fits — stays ≤ $500M</span>
             </div>
           ) : (
             <p className="text-amber-400 font-medium">
@@ -313,12 +326,12 @@ export default function SuggestedTrades({
           </div>
         ) : isOptimal ? (
           <div className="grid grid-cols-2 gap-4">
-            {/* BUYs — exclusive sell reservation per card; pre-funded fallback if sells consumed */}
+            {/* BUYs — any buy can be applied once accumulated sell capacity covers its delta */}
             <div>
               <SectionHeader label="Increase / Enter" count={buys.length} color="green" />
               {buys.length > 0
                 ? <div className="space-y-2">{buys.map((t, i) => {
-                    const { sellTrades, label, canFund } = buyFundings[i]
+                    const { label, canFund } = buyFundings[i]
                     return (
                       <TradeCard
                         key={`buy-${i}`}
@@ -326,12 +339,12 @@ export default function SuggestedTrades({
                         applied={appliedCusips.has(t.cusip)}
                         canFund={canFund}
                         fundLabel={label}
-                        onFundedApply={() => onApplyAllTrades([...sellTrades, t])}
+                        onFundedApply={() => onApplyAllTrades([t])}
                         applyInProgress={applyInProgress}
                       />
                     )
                   })}</div>
-                : <p className="text-gray-600 text-xs py-4 text-center">No buys above threshold</p>
+                : <p className="text-text-muted text-xs py-4 text-center">No buys above threshold</p>
               }
             </div>
 
@@ -348,12 +361,12 @@ export default function SuggestedTrades({
                       applyInProgress={applyInProgress}
                     />
                   ))}</div>
-                : <p className="text-gray-600 text-xs py-4 text-center">No sells above threshold</p>
+                : <p className="text-text-muted text-xs py-4 text-center">No sells above threshold</p>
               }
             </div>
           </div>
         ) : (
-          <div className="py-10 text-center text-gray-600 text-sm">
+          <div className="py-10 text-center text-text-muted text-sm">
             No trades to show — run the optimizer first.
           </div>
         )}

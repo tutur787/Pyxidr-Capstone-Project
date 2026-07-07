@@ -27,13 +27,13 @@ function RateRow({ r }: { r: BondRate }) {
   const border = up ? 'border-emerald-500/15' : 'border-red-500/15'
 
   return (
-    <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${border} ${bg} hover:brightness-110 transition-all`}>
+    <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${border} ${bg} hover:brightness-110 transition-all`}>
       <div className="flex items-center gap-3 min-w-0">
-        <span className="text-white font-mono font-bold text-sm w-14 flex-shrink-0">{r.symbol}</span>
-        <span className="text-gray-500 text-xs truncate hidden sm:block">{r.name}</span>
+        <span className="text-text-primary font-mono font-bold text-sm w-14 flex-shrink-0">{r.symbol}</span>
+        <span className="text-text-muted text-xs truncate hidden sm:block">{r.name}</span>
       </div>
       <div className="flex items-center gap-4 flex-shrink-0">
-        <span className="text-white font-mono font-semibold text-sm tabular-nums">
+        <span className="text-text-primary font-mono font-semibold text-sm tabular-nums">
           {r.yield_pct.toFixed(2)}%
         </span>
         <div className={`flex items-center gap-1 min-w-[80px] justify-end ${clr}`}>
@@ -77,30 +77,30 @@ export default function MarketsPanel({ date }: Props) {
   }, [date])
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col h-full">
+    <div className="bg-surface-1 rounded-2xl border border-border p-4 flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-white font-semibold text-sm">Rates</h2>
-          <p className="text-gray-500 text-xs mt-0.5">{live ? `As of ${date}` : `Sim date ${date}`}</p>
+          <h2 className="text-text-primary font-semibold text-sm">Rates</h2>
+          <p className="text-text-muted text-xs mt-0.5">{live ? `As of ${date}` : `Sim date ${date}`}</p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full border ${live
           ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
-          : 'text-gray-500 border-gray-700 bg-gray-800'}`}>
+          : 'text-text-muted border-border bg-surface-2'}`}>
           {live ? '● Live' : '○ Stub'}
         </span>
       </div>
 
       <div className="flex items-center justify-between px-3 mb-1.5">
-        <span className="text-gray-600 text-xs">Instrument</span>
+        <span className="text-text-muted text-xs">Instrument</span>
         <div className="flex gap-4">
-          <span className="text-gray-600 text-xs">Yield</span>
-          <span className="text-gray-600 text-xs min-w-[80px] text-right">Change</span>
+          <span className="text-text-muted text-xs">Yield</span>
+          <span className="text-text-muted text-xs min-w-[80px] text-right">Change</span>
         </div>
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-gray-600 text-sm animate-pulse">Fetching rates…</span>
+          <span className="text-text-muted text-sm animate-pulse">Fetching rates…</span>
         </div>
       ) : (
         <div className="flex flex-col gap-1.5 flex-1">

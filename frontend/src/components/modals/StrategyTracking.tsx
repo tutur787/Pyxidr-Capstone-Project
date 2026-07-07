@@ -29,8 +29,8 @@ function fmtDual(n: number): string {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="h-20 bg-gray-800/40 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
-      <p className="text-gray-600 text-sm">{label}</p>
+    <div className="h-20 bg-surface-2/40 rounded-2xl border border-border border-dashed flex items-center justify-center">
+      <p className="text-text-muted text-sm">{label}</p>
     </div>
   )
 }
@@ -56,12 +56,12 @@ function LPScatterTooltip({ active, payload }: any) {
   if (!active || !payload?.[0]) return null
   const d = payload[0].payload
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs shadow-xl">
+    <div className="bg-surface-1 border border-border rounded-2xl p-3 text-xs shadow-xl">
       <p className="text-amber-400 font-mono font-semibold mb-1">{d.cusip}</p>
-      <p className="text-gray-400">Rating: <span className="text-gray-200">{d.rating}</span></p>
-      <p className="text-gray-400">Z-Spread: <span className="text-blue-400 font-mono">{(d.x as number).toFixed(1)} bps</span></p>
-      <p className="text-gray-400">Duration: <span className="text-gray-200 font-mono">{(d.duration as number).toFixed(2)} yr</span></p>
-      <p className="text-gray-400">Shadow Price: <span className="text-emerald-400 font-mono">{(d.y as number).toFixed(4)} bps</span></p>
+      <p className="text-text-muted">Rating: <span className="text-text-primary">{d.rating}</span></p>
+      <p className="text-text-muted">Z-Spread: <span className="text-blue-400 font-mono">{(d.x as number).toFixed(1)} bps</span></p>
+      <p className="text-text-muted">Duration: <span className="text-text-primary font-mono">{(d.duration as number).toFixed(2)} yr</span></p>
+      <p className="text-text-muted">Shadow Price: <span className="text-emerald-400 font-mono">{(d.y as number).toFixed(4)} bps</span></p>
     </div>
   )
 }
@@ -73,10 +73,10 @@ function EvolutionTooltip({ active, payload, label }: any) {
   const stat  = payload.find((p: any) => p.dataKey === 'sap_static')
   const alpha = payload.find((p: any) => p.dataKey === 'alpha')
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs shadow-xl min-w-[180px]">
-      <p className="text-gray-400 font-medium mb-2">{label}</p>
+    <div className="bg-surface-1 border border-border rounded-2xl p-3 text-xs shadow-xl min-w-[180px]">
+      <p className="text-text-muted font-medium mb-2">{label}</p>
       {opt   && <p className="text-amber-400 mb-0.5">Optimizer  <span className="font-mono float-right">{fmt$(opt.value)}</span></p>}
-      {stat  && <p className="text-gray-400 mb-0.5">Equal-wt   <span className="font-mono float-right">{fmt$(stat.value)}</span></p>}
+      {stat  && <p className="text-text-muted mb-0.5">Equal-wt   <span className="font-mono float-right">{fmt$(stat.value)}</span></p>}
       {alpha && <p className={`font-semibold ${alpha.value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>Alpha <span className="font-mono float-right">{fmt$(alpha.value)}</span></p>}
     </div>
   )
@@ -89,10 +89,10 @@ function CumulativeTooltip({ active, payload, label }: any) {
   const stat  = payload.find((p: any) => p.dataKey === 'cum_static')
   const alpha = payload.find((p: any) => p.dataKey === 'cum_alpha')
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs shadow-xl min-w-[210px]">
-      <p className="text-gray-400 font-medium mb-2">{label}</p>
+    <div className="bg-surface-1 border border-border rounded-2xl p-3 text-xs shadow-xl min-w-[210px]">
+      <p className="text-text-muted font-medium mb-2">{label}</p>
       {opt  && <p className="text-amber-400 mb-0.5">Optimizer earned  <span className="font-mono float-right">{fmt$(opt.value)}</span></p>}
-      {stat && <p className="text-gray-400 mb-0.5">Equal-wt earned   <span className="font-mono float-right">{fmt$(stat.value)}</span></p>}
+      {stat && <p className="text-text-muted mb-0.5">Equal-wt earned   <span className="font-mono float-right">{fmt$(stat.value)}</span></p>}
       {alpha && (
         <p className={`font-semibold ${alpha.value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
           Cumulative alpha  <span className="font-mono float-right">{alpha.value >= 0 ? '+' : ''}{fmt$(alpha.value)}</span>
@@ -203,24 +203,24 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {/* ── Section 0: Performance Evolution ──────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-white font-medium text-sm">Performance Evolution</h3>
-            <span className="text-gray-600 text-xs">Session history · resets on portfolio reset</span>
+            <h3 className="text-text-primary font-medium text-sm">Performance Evolution</h3>
+            <span className="text-text-muted text-xs">Session history · resets on portfolio reset</span>
           </div>
 
           {/* Summary KPI ribbon */}
           {history.length > 0 && (
             <div className="grid grid-cols-4 gap-2 mb-4">
               {[
-                { label: 'Dates Tracked',   value: String(history.length),        color: 'text-gray-300' },
+                { label: 'Dates Tracked',   value: String(history.length),        color: 'text-text-secondary' },
                 { label: 'Snapshot Alpha',  value: fmt$(latestAlpha),             color: latestAlpha >= 0 ? 'text-emerald-400' : 'text-red-400',
                   title: 'SAP rate advantage vs equal-weight at the latest visited date' },
                 { label: 'Cumul. Alpha',    value: cumulativeAlpha !== 0 ? `${cumulativeAlpha >= 0 ? '+' : ''}${fmt$(cumulativeAlpha)}` : '—',
                   color: cumulativeAlpha >= 0 ? 'text-emerald-400' : 'text-red-400',
                   title: 'Total income advantage accumulated since the first visited date (optimizer vs equal-weight, time-weighted)' },
-                { label: 'Trades Applied',  value: String(appliedTrades.length),  color: appliedTrades.length > 0 ? 'text-emerald-400' : 'text-gray-500' },
+                { label: 'Trades Applied',  value: String(appliedTrades.length),  color: appliedTrades.length > 0 ? 'text-emerald-400' : 'text-text-muted' },
               ].map(({ label, value, color, title }) => (
-                <div key={label} title={title} className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50 cursor-default">
-                  <p className="text-gray-500 text-xs mb-1">{label}</p>
+                <div key={label} title={title} className="bg-surface-2/60 rounded-2xl p-3 border border-border/50 cursor-default">
+                  <p className="text-text-muted text-xs mb-1">{label}</p>
                   <p className={`font-mono font-semibold text-sm ${color}`}>{value}</p>
                 </div>
               ))}
@@ -236,13 +236,13 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
           ) : (
             <>
               {/* ── Chart A: Snapshot SAP rate at each visited date ─────────── */}
-              <p className="text-gray-600 text-xs mb-2">
-                <span className="text-gray-400 font-medium">Snapshot SAP rate</span>
+              <p className="text-text-muted text-xs mb-2">
+                <span className="text-text-muted font-medium">Snapshot SAP rate</span>
                 {' '}— annualised SAP objective at each visited date ($/yr). Shows which strategy is currently better, but not how much has accumulated.
               </p>
               <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={history} margin={{ top: 8, right: 24, bottom: 0, left: 20 }}>
+                  <ComposedChart data={history} margin={{ top: 18, right: 24, bottom: 0, left: 20 }}>
                     <CartesianGrid stroke="#1f2937" vertical={false} />
                     <XAxis
                       dataKey="date"
@@ -274,22 +274,22 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center gap-5 mt-1.5 mb-6 text-xs text-gray-500 justify-center">
+              <div className="flex items-center gap-5 mt-1.5 mb-6 text-xs text-text-muted justify-center">
                 <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-amber-400" />SAP Optimizer</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-gray-500 border-dashed" />Equal-Weight</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-border-strong border-dashed" />Equal-Weight</span>
                 {appliedDates.length > 0 && (
                   <span className="flex items-center gap-1.5"><span className="inline-block w-px h-3 bg-emerald-400" />Trade applied</span>
                 )}
               </div>
 
               {/* ── Chart B: Cumulative SAP income since first date ──────────── */}
-              <p className="text-gray-600 text-xs mb-2">
-                <span className="text-gray-400 font-medium">Cumulative SAP income</span>
+              <p className="text-text-muted text-xs mb-2">
+                <span className="text-text-muted font-medium">Cumulative SAP income</span>
                 {' '}— total statutory income accumulated from the first visited date (SAP rate × time elapsed). Both strategies start at $0; the gap is cumulative alpha.
               </p>
               <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={cumulativeData} margin={{ top: 8, right: 24, bottom: 0, left: 20 }}>
+                  <ComposedChart data={cumulativeData} margin={{ top: 18, right: 24, bottom: 0, left: 20 }}>
                     <CartesianGrid stroke="#1f2937" vertical={false} />
                     <XAxis
                       dataKey="date"
@@ -323,9 +323,9 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center gap-5 mt-1.5 text-xs text-gray-500 justify-center">
+              <div className="flex items-center gap-5 mt-1.5 text-xs text-text-muted justify-center">
                 <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-amber-400" />Optimizer cumulative</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-gray-500 border-dashed" />Equal-weight cumulative</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-border-strong border-dashed" />Equal-weight cumulative</span>
                 {appliedDates.length > 0 && (
                   <span className="flex items-center gap-1.5"><span className="inline-block w-px h-3 bg-emerald-400" />Trade applied</span>
                 )}
@@ -338,15 +338,15 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {history.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-white font-medium text-sm">Metrics by Date</h3>
-              <span className="text-gray-600 text-xs">All dates visited this session</span>
+              <h3 className="text-text-primary font-medium text-sm">Metrics by Date</h3>
+              <span className="text-text-muted text-xs">All dates visited this session</span>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-gray-700 max-h-52 overflow-y-auto">
+            <div className="overflow-x-auto rounded-2xl border border-border max-h-52 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0">
-                  <tr className="bg-gray-800/90 border-b border-gray-700">
+                  <tr className="bg-surface-2/90 border-b border-border">
                     {['Date', 'SAP Opt', 'Equal-Wt', 'Alpha', 'Yield', 'Dur Gap', 'Spread', 'Bonds'].map(h => (
-                      <th key={h} className="px-3 py-2 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-3 py-2 text-left text-text-muted font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -356,25 +356,25 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                     return (
                       <tr
                         key={h.date}
-                        className={`border-b border-gray-800/60 hover:bg-gray-800/30
+                        className={`border-b border-border/60 hover:bg-surface-2/30
                           ${i === 0 ? 'bg-amber-500/5' : ''}
                           ${isAppliedDate ? 'border-l-2 border-l-emerald-500/40' : ''}`}
                       >
-                        <td className="px-3 py-2 font-mono text-gray-300 whitespace-nowrap">
+                        <td className="px-3 py-2 font-mono text-text-secondary whitespace-nowrap">
                           {h.date}
                           {isAppliedDate && <span className="ml-1.5 text-emerald-400 text-[9px]">▲ applied</span>}
                         </td>
                         <td className="px-3 py-2 font-mono text-amber-400">{fmt$(h.sap_opt)}</td>
-                        <td className="px-3 py-2 font-mono text-gray-400">{fmt$(h.sap_static)}</td>
+                        <td className="px-3 py-2 font-mono text-text-muted">{fmt$(h.sap_static)}</td>
                         <td className={`px-3 py-2 font-mono font-semibold ${h.alpha >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {h.alpha >= 0 ? '+' : ''}{fmt$(h.alpha)}
                         </td>
-                        <td className="px-3 py-2 font-mono text-gray-300">{h.yield_pct.toFixed(2)}%</td>
+                        <td className="px-3 py-2 font-mono text-text-secondary">{h.yield_pct.toFixed(2)}%</td>
                         <td className={`px-3 py-2 font-mono ${h.duration_gap <= 0.3 ? 'text-emerald-400' : 'text-amber-400'}`}>
                           {h.duration_gap.toFixed(3)} yr
                         </td>
                         <td className="px-3 py-2 font-mono text-blue-400">{h.spread_bps.toFixed(0)} bps</td>
-                        <td className="px-3 py-2 font-mono text-gray-400">{h.n_bonds_selected}</td>
+                        <td className="px-3 py-2 font-mono text-text-muted">{h.n_bonds_selected}</td>
                       </tr>
                     )
                   })}
@@ -387,8 +387,8 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {/* ── Section 1: SAP vs Static (current date snapshot) ──────────── */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-white font-medium text-sm">SAP Optimizer vs Equal-Weight Benchmark</h3>
-            <span className="text-gray-500 text-xs">Current date snapshot</span>
+            <h3 className="text-text-primary font-medium text-sm">SAP Optimizer vs Equal-Weight Benchmark</h3>
+            <span className="text-text-muted text-xs">Current date snapshot</span>
             {isOptimal && (
               <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 Live
@@ -399,14 +399,14 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
           {!isOptimal ? (
             <EmptyState label="Run optimizer to see benchmark comparison" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-700">
+            <div className="overflow-x-auto rounded-2xl border border-border">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-800/80 border-b border-gray-700">
-                    <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Metric</th>
+                  <tr className="bg-surface-2/80 border-b border-border">
+                    <th className="px-4 py-2.5 text-left text-text-muted font-medium">Metric</th>
                     <th className="px-4 py-2.5 text-right text-amber-400 font-medium">SAP Optimizer</th>
-                    <th className="px-4 py-2.5 text-right text-gray-400 font-medium">Equal-Weight</th>
-                    <th className="px-4 py-2.5 text-right text-gray-400 font-medium">Δ vs Benchmark</th>
+                    <th className="px-4 py-2.5 text-right text-text-muted font-medium">Equal-Weight</th>
+                    <th className="px-4 py-2.5 text-right text-text-muted font-medium">Δ vs Benchmark</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -422,16 +422,16 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                       fmt$(v)
 
                     const deltaColor =
-                      good === null ? 'text-gray-500' :
+                      good === null ? 'text-text-muted' :
                       good          ? 'text-emerald-400' : 'text-red-400'
 
                     return (
-                      <tr key={row.label} className="border-b border-gray-800/60 hover:bg-gray-800/30">
-                        <td className="px-4 py-3 text-gray-300 font-medium">{row.label}</td>
+                      <tr key={row.label} className="border-b border-border/60 hover:bg-surface-2/30">
+                        <td className="px-4 py-3 text-text-secondary font-medium">{row.label}</td>
                         <td className="px-4 py-3 text-right text-amber-400 font-mono font-semibold">
                           {fmtVal(row.optVal)}
                         </td>
-                        <td className="px-4 py-3 text-right text-gray-400 font-mono">
+                        <td className="px-4 py-3 text-right text-text-muted font-mono">
                           {fmtVal(row.stVal)}
                         </td>
                         <td className={`px-4 py-3 text-right font-mono font-semibold ${deltaColor}`}>
@@ -451,7 +451,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {/* ── Section 2: IMR Impact ──────────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-3 mb-3">
-            <h3 className="text-white font-medium text-sm">IMR Impact (Interest Maintenance Reserve)</h3>
+            <h3 className="text-text-primary font-medium text-sm">IMR Impact (Interest Maintenance Reserve)</h3>
             {isOptimal && Math.abs(imrTotal) > 1 && (
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                 imrTotal >= 0
@@ -462,7 +462,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
               </span>
             )}
           </div>
-          <p className="text-gray-600 text-xs mb-3">
+          <p className="text-text-muted text-xs mb-3">
             Rate-driven gains/losses on bond sales are deferred into IMR and released into NII on a straight-line basis over remaining duration.
           </p>
 
@@ -495,10 +495,10 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   </ComposedChart>
                 </ResponsiveContainer>
                 <div className="flex items-center gap-4 justify-center mt-1">
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span className="inline-block w-3 h-2 rounded-sm bg-emerald-500/80" />Quarterly NII release
+                  <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                    <span className="inline-block w-3 h-2 rounded-md bg-emerald-500/80" />Quarterly NII release
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5 text-xs text-text-muted">
                     <span className="inline-block w-4 border-t-2 border-amber-400" />IMR balance
                   </span>
                 </div>
@@ -513,27 +513,27 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                 return (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-gray-600 text-xs uppercase tracking-wider">Per-trade IMR contributions</p>
+                      <p className="text-text-muted text-xs uppercase tracking-wider">Per-trade IMR contributions</p>
                       {sorted.length > 0 && (
-                        <p className="text-gray-600 text-xs">{sorted.length} trade{sorted.length !== 1 ? 's' : ''}</p>
+                        <p className="text-text-muted text-xs">{sorted.length} trade{sorted.length !== 1 ? 's' : ''}</p>
                       )}
                     </div>
-                    <div className="rounded-xl border border-gray-700 overflow-hidden">
+                    <div className="rounded-2xl border border-border overflow-hidden">
                       <div className={`overflow-y-auto overflow-x-auto ${showAllIMR ? 'max-h-[420px]' : ''}`}>
                         <table className="w-full text-xs">
                           <thead className="sticky top-0">
-                            <tr className="bg-gray-800/90 border-b border-gray-700">
+                            <tr className="bg-surface-2/90 border-b border-border">
                               {['CUSIP', 'Sale Amount', 'Mid Price', 'Realized Gain'].map(h => (
-                                <th key={h} className="px-4 py-2 text-left text-gray-400 font-medium">{h}</th>
+                                <th key={h} className="px-4 py-2 text-left text-text-muted font-medium">{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {visible.map((c, i) => (
-                              <tr key={i} className="border-b border-gray-800/60 hover:bg-gray-800/30">
-                                <td className="px-4 py-2.5 font-mono text-gray-300">{c.cusip}</td>
-                                <td className="px-4 py-2.5 font-mono text-gray-300">{fmt$(c.sale_usd)}</td>
-                                <td className="px-4 py-2.5 font-mono text-gray-300">{c.mid_price.toFixed(2)}</td>
+                              <tr key={i} className="border-b border-border/60 hover:bg-surface-2/30">
+                                <td className="px-4 py-2.5 font-mono text-text-secondary">{c.cusip}</td>
+                                <td className="px-4 py-2.5 font-mono text-text-secondary">{fmt$(c.sale_usd)}</td>
+                                <td className="px-4 py-2.5 font-mono text-text-secondary">{c.mid_price.toFixed(2)}</td>
                                 <td className={`px-4 py-2.5 font-mono font-semibold ${c.realized_gain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                   {c.realized_gain >= 0 ? '+' : ''}{fmt$(c.realized_gain)}
                                 </td>
@@ -545,10 +545,10 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
 
                       {/* View more / View less footer */}
                       {overflow > 0 && (
-                        <div className="border-t border-gray-700 bg-gray-800/60">
+                        <div className="border-t border-border bg-surface-2/60">
                           <button
                             onClick={() => setShowAllIMR(v => !v)}
-                            className="w-full py-2 text-xs text-gray-400 hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
+                            className="w-full py-2 text-xs text-text-muted hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
                           >
                             {showAllIMR
                               ? <>▲ View less</>
@@ -567,18 +567,18 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {/* ── Section 2b: Swap Overlay ──────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-3 mb-1">
-            <h3 className="text-white font-medium text-sm">Swap Overlay</h3>
-            <span className="text-gray-600 text-xs">Receive-fixed interest-rate swaps</span>
+            <h3 className="text-text-primary font-medium text-sm">Swap Overlay</h3>
+            <span className="text-text-muted text-xs">Receive-fixed interest-rate swaps</span>
             {isOptimal && hasSwaps && (
               <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20">
                 {fmt$(totalSwapNotional)} notional
               </span>
             )}
           </div>
-          <p className="text-gray-600 text-xs mb-3">
+          <p className="text-text-muted text-xs mb-3">
             Swaps adjust duration at a fraction of bond bid-ask cost. Decision variables{' '}
-            <span className="font-mono text-gray-400">v[k]</span> enter the SAP LP jointly
-            with bond holdings <span className="font-mono text-gray-400">h[i]</span>.
+            <span className="font-mono text-text-muted">v[k]</span> enter the SAP LP jointly
+            with bond holdings <span className="font-mono text-text-muted">h[i]</span>.
           </p>
 
           {!isOptimal ? (
@@ -594,30 +594,30 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   { label: 'Net Income',     value: `+${fmt$(totalSwapIncome)}`, color: 'text-emerald-400' },
                   { label: 'Dur. Contribution', value: `${totalSwapDur.toFixed(4)} yr`, color: 'text-blue-400' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
-                    <p className="text-gray-500 text-xs mb-1">{label}</p>
+                  <div key={label} className="bg-surface-2/60 rounded-2xl p-3 border border-border/50">
+                    <p className="text-text-muted text-xs mb-1">{label}</p>
                     <p className={`font-mono font-semibold text-sm ${color}`}>{value}</p>
                   </div>
                 ))}
               </div>
 
               {/* Per-tenor allocation table */}
-              <div className="overflow-x-auto rounded-xl border border-gray-700">
+              <div className="overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-gray-800/80 border-b border-gray-700">
+                    <tr className="bg-surface-2/80 border-b border-border">
                       {['Tenor', 'Notional', 'Fixed Rate', 'Float Rate', 'Net Income ($/yr)', 'Dur. Contrib. (yr)'].map(h => (
-                        <th key={h} className="px-4 py-2 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-4 py-2 text-left text-text-muted font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {swapAllocs.map((s, i) => (
-                      <tr key={i} className={`border-b border-gray-800/60 hover:bg-gray-800/30 ${s.notional > 1_000 ? '' : 'opacity-40'}`}>
+                      <tr key={i} className={`border-b border-border/60 hover:bg-surface-2/30 ${s.notional > 1_000 ? '' : 'opacity-40'}`}>
                         <td className="px-4 py-2.5 font-mono text-purple-400 font-semibold">{s.tenor_years.toFixed(0)}yr</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-300">{fmt$(s.notional)}</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-300">{(s.fixed_rate * 100).toFixed(2)}%</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-500">—</td>
+                        <td className="px-4 py-2.5 font-mono text-text-secondary">{fmt$(s.notional)}</td>
+                        <td className="px-4 py-2.5 font-mono text-text-secondary">{(s.fixed_rate * 100).toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 font-mono text-text-secondary">{result ? (result.r_float * 100).toFixed(2) : '—'}%</td>
                         <td className={`px-4 py-2.5 font-mono font-semibold ${s.net_income >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {s.net_income >= 0 ? '+' : ''}{fmt$(s.net_income)}
                         </td>
@@ -631,70 +631,14 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
           )}
         </section>
 
-        {/* ── Section LP-A: Return on Equity (LP View) ─────────────────── */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-white font-medium text-sm">Return on Equity</h3>
-            <span className="text-gray-600 text-xs">LP view — statutory earnings vs regulatory capital</span>
-            <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
-          </div>
-          <p className="text-gray-600 text-xs mb-3">
-            ROE measures statutory NII relative to NAIC required capital (C1 × 3×).
-            FABN is primarily a spread opportunity — returns are driven by credit and duration risk taken on the asset side.
-          </p>
-
-          {!isOptimal ? (
-            <EmptyState label="Run optimizer to see ROE metrics" />
-          ) : (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  {
-                    label:   'ROE (Statutory)',
-                    value:   `${(result!.rbc_ratio * 100).toFixed(1)}%`,
-                    sublabel: 'NII / Req. Capital',
-                    color:   result!.rbc_ratio >= 0.1 ? 'text-emerald-400' : 'text-amber-400',
-                  },
-                  {
-                    label:   'Capital Intensity',
-                    value:   `${(result!.rbc_c1_usage * 100).toFixed(2)}%`,
-                    sublabel: 'C1 RBC / Portfolio',
-                    color:   'text-blue-400',
-                  },
-                  {
-                    label:   'Benchmark Alpha',
-                    value:   `${result!.nev - result!.static_comparison.sap >= 0 ? '+' : ''}${fmt$(result!.nev - result!.static_comparison.sap)}`,
-                    sublabel: 'Optimizer vs Equal-Weight',
-                    color:   result!.nev - result!.static_comparison.sap >= 0 ? 'text-emerald-400' : 'text-red-400',
-                  },
-                ] as const).map(({ label, value, sublabel, color }) => (
-                  <div key={label} className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
-                    <p className="text-gray-500 text-xs mb-1 uppercase tracking-wider">{label}</p>
-                    <p className={`font-mono font-semibold text-xl ${color}`}>{value}</p>
-                    <p className="text-gray-600 text-[10px] mt-0.5">{sublabel}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 px-3 py-2.5 bg-blue-500/5 rounded-lg border border-blue-500/10">
-                <p className="text-gray-500 text-xs leading-relaxed">
-                  <span className="text-blue-400 font-medium">LP context: </span>
-                  The chart and table below show the <span className="text-gray-300">shadow price of each bond</span> —
-                  the marginal SAP improvement from increasing its allocation. Compare to Z-spread to assess whether
-                  the optimizer is extracting value in proportion to the credit and duration risk taken.
-                </p>
-              </div>
-            </>
-          )}
-        </section>
-
         {/* ── Section LP-B: Per-Bond Shadow Price vs Z-Spread ───────────── */}
         <section>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-white font-medium text-sm">Marginal LP Value vs Z-Spread</h3>
-            <span className="text-gray-600 text-xs">Per-bond Gurobi reduced costs</span>
+            <h3 className="text-text-primary font-medium text-sm">Marginal LP Value vs Z-Spread</h3>
+            <span className="text-text-muted text-xs">Per-bond Gurobi reduced costs</span>
             <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
           </div>
-          <p className="text-gray-600 text-xs mb-3">
+          <p className="text-text-muted text-xs mb-3">
             X = Z-spread (credit risk proxy, bps). Y = reduced cost × 10 000 (bps) — SAP improvement per $1 invested.
             Bonds above zero are at their upper weight limit; their constraint is binding on the optimizer.
           </p>
@@ -731,7 +675,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                   </ScatterChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center gap-4 justify-center mt-1 mb-4 text-xs text-gray-500">
+              <div className="flex items-center gap-4 justify-center mt-1 mb-4 text-xs text-text-muted">
                 {LP_BUCKET_LABELS.map(([color, label]) => (
                   <span key={label} className="flex items-center gap-1.5">
                     <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -741,11 +685,11 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
               </div>
 
               {/* Sortable table */}
-              <div className="rounded-xl border border-gray-700 overflow-hidden">
+              <div className="rounded-2xl border border-border overflow-hidden">
                 <div className={`overflow-x-auto ${showAllLP ? 'overflow-y-auto max-h-[500px]' : ''}`}>
                   <table className="w-full text-xs">
                     <thead className="sticky top-0">
-                      <tr className="bg-gray-800/90 border-b border-gray-700">
+                      <tr className="bg-surface-2/90 border-b border-border">
                         {([
                           { key: 'cusip',        label: 'CUSIP',                 sortable: false },
                           { key: 'rating',       label: 'Rating',                sortable: false },
@@ -758,7 +702,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                             onClick={col.sortable
                               ? () => toggleLpSort(col.key as 'reduced_cost' | 'spread_bps' | 'duration')
                               : undefined}
-                            className={`px-4 py-2 text-left text-gray-400 font-medium whitespace-nowrap
+                            className={`px-4 py-2 text-left text-text-muted font-medium whitespace-nowrap
                               ${col.sortable ? 'cursor-pointer hover:text-amber-400 select-none' : ''}`}
                           >
                             {col.label}
@@ -773,12 +717,12 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                       {(showAllLP ? lpAllocs : lpAllocs.slice(0, LP_PAGE)).map((a, i) => {
                         const rc = a.reduced_cost ?? 0
                         return (
-                          <tr key={i} className={`border-b border-gray-800/60 hover:bg-gray-800/30 ${rc > 0 ? 'bg-amber-500/5' : ''}`}>
+                          <tr key={i} className={`border-b border-border/60 hover:bg-surface-2/30 ${rc > 0 ? 'bg-amber-500/5' : ''}`}>
                             <td className="px-4 py-2.5 font-mono text-amber-400">{a.cusip}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-300">{a.rating}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-300">{a.duration.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 font-mono text-text-secondary">{a.rating}</td>
+                            <td className="px-4 py-2.5 font-mono text-text-secondary">{a.duration.toFixed(2)}</td>
                             <td className="px-4 py-2.5 font-mono text-blue-400">{a.spread_bps.toFixed(1)}</td>
-                            <td className={`px-4 py-2.5 font-mono font-semibold ${rc > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                            <td className={`px-4 py-2.5 font-mono font-semibold ${rc > 0 ? 'text-amber-400' : 'text-text-muted'}`}>
                               {(rc * 1e6).toFixed(2)}
                             </td>
                           </tr>
@@ -789,10 +733,10 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                 </div>
 
                 {lpAllocs.length > LP_PAGE && (
-                  <div className="border-t border-gray-700 bg-gray-800/60">
+                  <div className="border-t border-border bg-surface-2/60">
                     <button
                       onClick={() => setShowAllLP(v => !v)}
-                      className="w-full py-2 text-xs text-gray-400 hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
+                      className="w-full py-2 text-xs text-text-muted hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
                     >
                       {showAllLP ? <>▲ Show fewer</> : <>▼ Show all {lpAllocs.length} bonds</>}
                     </button>
@@ -806,9 +750,9 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {/* ── Section 3: Shadow Prices ───────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-white font-medium text-sm">Constraint Shadow Prices</h3>
+            <h3 className="text-text-primary font-medium text-sm">Constraint Shadow Prices</h3>
           </div>
-          <p className="text-gray-600 text-xs mb-3">
+          <p className="text-text-muted text-xs mb-3">
             Marginal SAP improvement from relaxing each constraint by one unit.
             Amber rows are binding — these constraints are limiting the optimizer.
           </p>
@@ -816,31 +760,31 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
           {!isOptimal ? (
             <EmptyState label="Run optimizer to see shadow prices" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-700">
+            <div className="overflow-x-auto rounded-2xl border border-border">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-800/80 border-b border-gray-700">
-                    <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Constraint</th>
-                    <th className="px-4 py-2.5 text-right text-gray-400 font-medium">Shadow Price</th>
-                    <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Interpretation</th>
+                  <tr className="bg-surface-2/80 border-b border-border">
+                    <th className="px-4 py-2.5 text-left text-text-muted font-medium">Constraint</th>
+                    <th className="px-4 py-2.5 text-right text-text-muted font-medium">Shadow Price</th>
+                    <th className="px-4 py-2.5 text-left text-text-muted font-medium">Interpretation</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shadowPrices.map((row, i) => {
                     const isBinding = row.dual !== null && Math.abs(row.dual) > 1
                     return (
-                      <tr key={i} className={`border-b border-gray-800/60 hover:bg-gray-800/30 ${isBinding ? 'bg-amber-500/5' : ''}`}>
-                        <td className={`px-4 py-3 font-medium ${isBinding ? 'text-amber-300' : 'text-gray-300'}`}>{row.label}</td>
+                      <tr key={i} className={`border-b border-border/60 hover:bg-surface-2/30 ${isBinding ? 'bg-amber-500/5' : ''}`}>
+                        <td className={`px-4 py-3 font-medium ${isBinding ? 'text-amber-300' : 'text-text-secondary'}`}>{row.label}</td>
                         <td className={`px-4 py-3 text-right font-mono font-semibold ${
-                          row.dual === null          ? 'text-gray-600' :
-                          Math.abs(row.dual) < 0.01 ? 'text-gray-500' :
-                          isBinding                 ? 'text-amber-400' : 'text-gray-300'
+                          row.dual === null          ? 'text-text-muted' :
+                          Math.abs(row.dual) < 0.01 ? 'text-text-muted' :
+                          isBinding                 ? 'text-amber-400' : 'text-text-secondary'
                         }`}>
                           {row.dual === null
                             ? 'n/a'
                             : `${row.dual >= 0 ? '+' : ''}${fmtDual(row.dual)} ${row.unit}`}
                         </td>
-                        <td className="px-4 py-3 text-gray-500">
+                        <td className="px-4 py-3 text-text-muted">
                           {row.dual === null
                             ? 'Constraint not found in model'
                             : Math.abs(row.dual) < 0.01
@@ -860,27 +804,27 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
         {appliedTrades.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-white font-medium text-sm">Applied Trades Log</h3>
+              <h3 className="text-text-primary font-medium text-sm">Applied Trades Log</h3>
               <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 {appliedTrades.length} trade{appliedTrades.length > 1 ? 's' : ''}
               </span>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-gray-700">
+            <div className="overflow-x-auto rounded-2xl border border-border">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-800/80 border-b border-gray-700">
+                  <tr className="bg-surface-2/80 border-b border-border">
                     {['Applied On', 'CUSIP', 'Action', 'Δ USD', 'Target ($M)'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-4 py-2.5 text-left text-text-muted font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[...appliedTrades].reverse().map((t, i) => (
-                    <tr key={i} className="border-b border-gray-800/60 hover:bg-gray-800/30">
-                      <td className="px-4 py-2.5 font-mono text-gray-500">{t.appliedAt}</td>
+                    <tr key={i} className="border-b border-border/60 hover:bg-surface-2/30">
+                      <td className="px-4 py-2.5 font-mono text-text-muted">{t.appliedAt}</td>
                       <td className="px-4 py-2.5 font-mono text-amber-400">{t.cusip}</td>
                       <td className="px-4 py-2.5">
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                        <span className={`px-1.5 py-0.5 rounded-lg text-xs font-bold ${
                           t.action === 'BUY'
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : 'bg-red-500/20 text-red-400'
@@ -889,7 +833,7 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                       <td className={`px-4 py-2.5 font-mono font-semibold ${t.delta_usd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {t.delta_usd >= 0 ? '+' : ''}{fmt$(t.delta_usd)}
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-gray-300">
+                      <td className="px-4 py-2.5 font-mono text-text-secondary">
                         ${(t.h_opt / 1e6).toFixed(2)}M
                       </td>
                     </tr>

@@ -3,6 +3,38 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Light theme — Pyxidr brand palette (pyxidr.com) */
+    --surface-0: #e7e9eb;
+    --surface-1: #ffffff;
+    --surface-2: #f4f5f6;
+    --surface-3: #e9ebed;
+    --border: #d3d7db;
+    --border-strong: #aab0b6;
+    --text-primary: #192730;
+    --text-secondary: #52636e;
+    --text-muted: #79838a;
+    --brand-accent: #086db0;
+    --brand-accent-hover: #06598f;
+    --brand-highlight: #eb008a;
+  }
+
+  .dark {
+    /* Dark theme — slate-tinted, lifted from Pyxidr's #192730 family */
+    --surface-0: #0b1216;
+    --surface-1: #131c22;
+    --surface-2: #1c272e;
+    --surface-3: #232f37;
+    --border: #2a343b;
+    --border-strong: #3d4850;
+    --text-primary: #eef1f2;
+    --text-secondary: #a0a8ad;
+    --text-muted: #6b7680;
+    --brand-accent: #2f93d1;
+    --brand-accent-hover: #56acdf;
+    --brand-highlight: #f0399e;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -14,11 +46,12 @@
   }
 
   body {
-    background-color: #030712;
-    color: #f3f4f6;
+    background-color: var(--surface-0);
+    color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   ::-webkit-scrollbar {
@@ -29,11 +62,11 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #374151;
+    background: var(--border-strong);
     border-radius: 2px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #4b5563;
+    background: var(--text-muted);
   }
 }
 
@@ -41,4 +74,27 @@
   .font-mono {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
   }
+
+  /* Apple-style translucent "liquid glass" surface */
+  .glass {
+    background-color: color-mix(in srgb, var(--surface-1) 88%, transparent);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    box-shadow: inset 0 1px 0 0 color-mix(in srgb, var(--text-primary) 6%, transparent),
+                0 1px 3px 0 color-mix(in srgb, var(--text-primary) 6%, transparent);
+  }
+}
+
+/* Signal-color text (amber/emerald/red/blue/purple -400/-500) is tuned for dark
+   backgrounds and reads as low-contrast pastel on light surfaces. Re-tune to
+   darker/more saturated shades in light mode only; dark mode keeps the originals. */
+html:not(.dark) {
+  .text-amber-100, .text-amber-300, .text-amber-400   { color: #92400e; }
+  .text-amber-500                                     { color: #78350f; }
+  .text-emerald-400                                    { color: #047857; }
+  .text-emerald-500, .text-emerald-600                 { color: #065f46; }
+  .text-red-400                                        { color: #b91c1c; }
+  .text-red-500, .text-red-600                         { color: #991b1b; }
+  .text-blue-400                                       { color: #1d4ed8; }
+  .text-purple-400                                     { color: #6d28d9; }
 }

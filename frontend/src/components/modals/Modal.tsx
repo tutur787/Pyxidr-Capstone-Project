@@ -23,16 +23,16 @@ export default function Modal({ title, subtitle, onClose, children }: Props) {
       />
 
       {/* panel */}
-      <div className="relative w-full max-w-4xl max-h-[85vh] bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="glass relative w-full max-w-4xl max-h-[85vh] border border-border rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         {/* header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h2 className="text-white font-semibold text-lg">{title}</h2>
-            {subtitle && <p className="text-gray-500 text-sm mt-0.5">{subtitle}</p>}
+            <h2 className="text-text-primary font-semibold text-lg">{title}</h2>
+            {subtitle && <p className="text-text-muted text-sm mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors text-sm"
+            className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-full transition-colors text-sm"
           >
             ✕
           </button>

@@ -43,16 +43,16 @@ export default function AIChat() {
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col h-full">
+    <div className="bg-surface-1 rounded-2xl border border-border p-4 flex flex-col h-full">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm">
           ◈
         </div>
         <div>
-          <h2 className="text-white font-semibold text-sm">AI Portfolio Assistant</h2>
-          <p className="text-gray-500 text-xs">Ask questions about your portfolio</p>
+          <h2 className="text-text-primary font-semibold text-sm">AI Portfolio Assistant</h2>
+          <p className="text-text-muted text-xs">Ask questions about your portfolio</p>
         </div>
-        <span className="ml-auto text-xs text-gray-600 border border-gray-700 px-2 py-0.5 rounded-full">
+        <span className="ml-auto text-xs text-text-muted border border-border px-2 py-0.5 rounded-full">
           Stub mode
         </span>
       </div>
@@ -60,20 +60,20 @@ export default function AIChat() {
       <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 min-h-0">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed
+            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed
               ${msg.role === 'user'
                 ? 'bg-amber-500/15 border border-amber-500/20 text-amber-100'
-                : 'bg-gray-800 border border-gray-700 text-gray-300'
+                : 'bg-surface-2 border border-border text-text-secondary'
               }`}>
               <p>{msg.content}</p>
-              <p className="text-gray-600 text-[10px] mt-1 text-right">{msg.timestamp}</p>
+              <p className="text-text-muted text-[10px] mt-1 text-right">{msg.timestamp}</p>
             </div>
           </div>
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
-              <span className="text-gray-500 text-xs animate-pulse">Thinking…</span>
+            <div className="bg-surface-2 border border-border rounded-2xl px-3 py-2">
+              <span className="text-text-muted text-xs animate-pulse">Thinking…</span>
             </div>
           </div>
         )}
@@ -87,14 +87,14 @@ export default function AIChat() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKey}
           placeholder="Ask about your portfolio…"
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-200
-            placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+          className="flex-1 bg-surface-2 border border-border rounded-2xl px-3 py-2 text-sm text-text-primary
+            placeholder-text-muted focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || loading}
           className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed
-            text-gray-900 font-semibold text-sm rounded-xl transition-colors flex-shrink-0"
+            text-gray-900 font-semibold text-sm rounded-2xl transition-colors flex-shrink-0"
         >
           ↑
         </button>

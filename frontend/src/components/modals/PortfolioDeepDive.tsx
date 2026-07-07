@@ -64,51 +64,51 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
             { label: 'Avg Spread',    value: isOptimal ? `${avgSpread} bps`     : undefined },
             { label: 'Avg Rating',    value: isOptimal ? mostCommonRating(allocs) : undefined },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-              <p className="text-gray-500 text-xs mb-1">{label}</p>
+            <div key={label} className="bg-surface-2 rounded-2xl p-4 border border-border">
+              <p className="text-text-muted text-xs mb-1">{label}</p>
               {value !== undefined
-                ? <p className="text-white font-mono font-semibold text-sm">{value}</p>
-                : <div className="h-5 w-16 bg-gray-700 rounded animate-pulse" />}
+                ? <p className="text-text-primary font-mono font-semibold text-sm">{value}</p>
+                : <div className="h-5 w-16 bg-surface-3 rounded-lg animate-pulse" />}
             </div>
           ))}
         </div>
 
         {/* Bond table */}
         <div>
-          <h3 className="text-white font-medium text-sm mb-3">
+          <h3 className="text-text-primary font-medium text-sm mb-3">
             Bond Universe
-            {isOptimal && <span className="text-gray-500 font-normal ml-2">({allocs.length} positions)</span>}
+            {isOptimal && <span className="text-text-muted font-normal ml-2">({allocs.length} positions)</span>}
           </h3>
-          <div className="overflow-x-auto rounded-xl border border-gray-700 max-h-72 overflow-y-auto">
+          <div className="overflow-x-auto rounded-2xl border border-border max-h-72 overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0">
-                <tr className="bg-gray-800 border-b border-gray-700">
+                <tr className="bg-surface-2 border-b border-border">
                   {COLS.map(c => (
-                    <th key={c} className="px-4 py-2.5 text-left text-gray-400 font-medium whitespace-nowrap">{c}</th>
+                    <th key={c} className="px-4 py-2.5 text-left text-text-muted font-medium whitespace-nowrap">{c}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {isOptimal
                   ? allocs.map((a, i) => (
-                    <tr key={a.cusip} className={`border-b border-gray-800 hover:bg-gray-800/40 ${i % 2 === 0 ? '' : 'bg-gray-900/40'}`}>
+                    <tr key={a.cusip} className={`border-b border-border hover:bg-surface-2/40 ${i % 2 === 0 ? '' : 'bg-surface-1/40'}`}>
                       <td className="px-4 py-2.5 font-mono text-amber-400">{a.cusip}</td>
-                      <td className="px-4 py-2.5 text-gray-300 max-w-[140px] truncate">{a.sector}</td>
+                      <td className="px-4 py-2.5 text-text-secondary max-w-[140px] truncate">{a.sector}</td>
                       <td className="px-4 py-2.5">
-                        <span className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 font-mono">{a.rating || '—'}</span>
+                        <span className="px-1.5 py-0.5 bg-surface-3 rounded-lg text-text-secondary font-mono">{a.rating || '—'}</span>
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-gray-200">{(a.weight * 100).toFixed(2)}%</td>
+                      <td className="px-4 py-2.5 font-mono text-text-primary">{(a.weight * 100).toFixed(2)}%</td>
                       <td className="px-4 py-2.5 font-mono text-blue-400">{a.spread_bps.toFixed(1)}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-300">{a.duration.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 font-mono text-text-secondary">{a.duration.toFixed(2)}</td>
                       <td className="px-4 py-2.5 font-mono text-emerald-400">${(a.h_opt / 1e6).toFixed(2)}M</td>
                     </tr>
                   ))
                   : Array.from({ length: SKELETON_ROWS }).map((_, i) => (
-                    <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/40">
+                    <tr key={i} className="border-b border-border hover:bg-surface-2/40">
                       {COLS.map(c => (
                         <td key={c} className="px-4 py-3">
                           <div
-                            className="h-3 bg-gray-700/60 rounded animate-pulse"
+                            className="h-3 bg-surface-3/60 rounded-lg animate-pulse"
                             style={{ width: `${50 + (i * 7 + c.length * 3) % 40}%` }}
                           />
                         </td>
@@ -120,7 +120,7 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
             </table>
           </div>
           {!isOptimal && (
-            <p className="text-gray-600 text-xs mt-2 text-center">
+            <p className="text-text-muted text-xs mt-2 text-center">
               {loading ? 'Optimizer running…' : 'Bond-level data will populate from the optimizer output.'}
             </p>
           )}
@@ -129,8 +129,8 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
         {/* Quarterly Cashflow chart */}
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-white font-medium text-sm">Quarterly Cashflow</h3>
-            <span className="text-gray-600 text-xs">FABN obligations · asset receipts · net balance</span>
+            <h3 className="text-text-primary font-medium text-sm">Quarterly Cashflow</h3>
+            <span className="text-text-muted text-xs">FABN obligations · asset receipts · net balance</span>
           </div>
           {isOptimal && (result?.cashflows ?? []).length > 0 ? (() => {
             const cfData = result!.cashflows.map(row => ({
@@ -170,17 +170,17 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-                <div className="flex items-center gap-5 justify-center mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-red-500/75" />FABN obligation</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-500/80" />Asset receipts</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-blue-500/80" />Total balance (surplus)</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-orange-500/80" />Total balance (deficit)</span>
+                <div className="flex items-center gap-5 justify-center mt-2 text-xs text-text-muted">
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-md bg-red-500/75" />FABN obligation</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-md bg-emerald-500/80" />Asset receipts</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-md bg-blue-500/80" />Total balance (surplus)</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-md bg-orange-500/80" />Total balance (deficit)</span>
                 </div>
               </div>
             )
           })() : (
-            <div className="h-20 bg-gray-800/40 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
-              <p className="text-gray-600 text-sm">
+            <div className="h-20 bg-surface-2/40 rounded-2xl border border-border border-dashed flex items-center justify-center">
+              <p className="text-text-muted text-sm">
                 {loading ? 'Optimizer running…' : 'Quarterly cashflow chart — run optimizer to populate'}
               </p>
             </div>
@@ -189,7 +189,7 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
 
         {/* Sector allocation chart */}
         <div>
-          <h3 className="text-white font-medium text-sm mb-3">Weight Distribution by Sector</h3>
+          <h3 className="text-text-primary font-medium text-sm mb-3">Weight Distribution by Sector</h3>
           {isOptimal && sectors.length > 0 ? (
             <div style={{ height: Math.max(180, sectors.length * 32) }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -228,8 +228,8 @@ export default function PortfolioDeepDive({ onClose, result, loading }: Props) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-40 bg-gray-800 rounded-xl border border-gray-700 border-dashed flex items-center justify-center">
-              <p className="text-gray-600 text-sm">
+            <div className="h-40 bg-surface-2 rounded-2xl border border-border border-dashed flex items-center justify-center">
+              <p className="text-text-muted text-sm">
                 {loading ? 'Optimizer running…' : 'Sector allocation chart — populate from optimizer'}
               </p>
             </div>

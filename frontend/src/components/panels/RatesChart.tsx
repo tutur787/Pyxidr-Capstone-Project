@@ -10,8 +10,8 @@ interface Props {
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-gray-400 mb-1.5 font-mono">{label}</p>
+    <div className="bg-surface-2 border border-border rounded-xl px-3 py-2 text-xs shadow-xl">
+      <p className="text-text-muted mb-1.5 font-mono">{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} style={{ color: p.color }} className="font-mono">
           {p.name}: {p.value?.toFixed(2)}
@@ -56,30 +56,30 @@ export default function RatesChart({ date }: Props) {
   const thinned = useMemo(() => data.filter((_, i) => i % 3 === 0), [data])
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col h-full">
+    <div className="bg-surface-1 rounded-2xl border border-border p-4 flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-white font-semibold text-sm">
+          <h2 className="text-text-primary font-semibold text-sm">
             {live ? 'Bond ETF Prices' : 'Treasury Rates'}
           </h2>
-          <p className="text-gray-500 text-xs mt-0.5">
+          <p className="text-text-muted text-xs mt-0.5">
             {live ? 'SHY (2Y proxy) · IEF (10Y proxy) — indexed to 100' : '90-day trailing · simulated'}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex gap-3 text-xs">
             <span className="flex items-center gap-1.5 text-red-400">
-              <span className="w-3 h-0.5 bg-red-400 rounded inline-block" />
+              <span className="w-3 h-0.5 bg-red-400 rounded-lg inline-block" />
               {live ? 'SHY' : '2Y'}
             </span>
             <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="w-3 h-0.5 bg-emerald-400 rounded inline-block" />
+              <span className="w-3 h-0.5 bg-emerald-400 rounded-lg inline-block" />
               {live ? 'IEF' : '10Y'}
             </span>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full border ${live
             ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
-            : 'text-gray-500 border-gray-700 bg-gray-800'}`}>
+            : 'text-text-muted border-border bg-surface-2'}`}>
             {live ? '● Live' : '○ Stub'}
           </span>
         </div>
@@ -87,7 +87,7 @@ export default function RatesChart({ date }: Props) {
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-gray-600 text-sm animate-pulse">Loading rates…</span>
+          <span className="text-text-muted text-sm animate-pulse">Loading rates…</span>
         </div>
       ) : (
         <div className="flex-1 min-h-0">

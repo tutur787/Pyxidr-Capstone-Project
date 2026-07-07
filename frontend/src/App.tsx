@@ -11,15 +11,17 @@ import StrategyTracking from './components/modals/StrategyTracking'
 import Risk from './components/modals/Risk'
 import DerivativeUsage from './components/modals/DerivativeUsage'
 import { useDate } from './hooks/useDate'
-import { defaultHyperParams, STUB_FABNS } from './data/stubs'
+import { defaultHyperParams, KNOWN_FABNS } from './data/stubs'
 import type { TabId, HyperParams, Fabn, OptimizerResult, Trade, AppliedTrade, HistoryEntry, FabnMarketPoint } from './types'
 
 export default function App() {
   const { date, advanceDate, jumpToDate, isAtMin, isAtMax, formatDisplay } = useDate()
   const [activeModal, setActiveModal] = useState<TabId | null>(null)
   const [hyperParams, setHyperParams] = useState<HyperParams>(defaultHyperParams)
-  const [fabns, setFabns] = useState<Fabn[]>(STUB_FABNS)
-  const [selectedFabns, setSelectedFabns] = useState<Fabn[]>([])
+  const [fabns, setFabns] = useState<Fabn[]>(KNOWN_FABNS)
+  const [selectedFabns, setSelectedFabns] = useState<Fabn[]>(
+    () => KNOWN_FABNS.filter(f => f.status === 'active')
+  )
   const [fabnMarketHistory, setFabnMarketHistory] = useState<FabnMarketPoint[]>([])
 
   // Optimizer state
@@ -73,7 +75,8 @@ export default function App() {
       `&lambda_w=${p.lambda_w}` +
       `&eps_D=${p.eps_D}` +
       `&w_max=${p.w_max}` +
-      `&n_min=${p.n_min}`
+      `&n_min=${p.n_min}` +
+      `&vol_percentile=${p.vol_percentile}`
     try {
       const res  = await fetch(url)
       const data: OptimizerResult = await res.json()
@@ -189,7 +192,7 @@ export default function App() {
   function closeModal() { setActiveModal(null) }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-950 text-gray-100">
+    <div className="min-h-screen flex flex-col bg-surface-0 text-text-primary">
       <div className="sticky top-0 z-30">
         <Header
           date={date}
@@ -293,7 +296,13 @@ export default function App() {
           loading={optimizerLoading}
         />
       )}
-      {activeModal === 'derivative-usage' && <DerivativeUsage onClose={closeModal} />}
+      {activeModal === 'derivative-usage' && (
+        <DerivativeUsage
+          onClose={closeModal}
+          result={optimizerResult}
+          loading={optimizerLoading}
+        />
+      )}
     </div>
   )
 }

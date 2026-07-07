@@ -134,19 +134,45 @@ def _stub_kpis() -> dict:
 
 # ── FABN list ─────────────────────────────────────────────────────────────────
 
-_STUB_FABNS = [
-    {"cusip": "FABN1", "coupon": None, "maturity": "", "rating": "", "sector": ""},
-    {"cusip": "FABN2", "coupon": None, "maturity": "", "rating": "", "sector": ""},
-    {"cusip": "FABN3", "coupon": None, "maturity": "", "rating": "", "sector": ""},
+_KNOWN_FABNS = [
+    # The one real FABN this whole app is built around (FABN.xlsx "BB Fixed" sheet):
+    # ATH 3.205 03/08/27, issued by Athene Global Funding.
+    {
+        "cusip":    "04685A3L3",
+        "coupon":   0.03205,
+        "maturity": "2027-03-08",
+        "rating":   "A+",
+        "sector":   "Athene Global Funding",
+        "status":   "active",
+    },
+    # Future FABN issuances — not yet modeled, shown so the selector reflects the
+    # program's shape without fabricating data for deals that don't exist yet.
+    {
+        "cusip":    "Next FABN — 2026",
+        "coupon":   None,
+        "maturity": "",
+        "rating":   "",
+        "sector":   "Not yet issued",
+        "status":   "coming_soon",
+    },
+    {
+        "cusip":    "Next FABN — 2027",
+        "coupon":   None,
+        "maturity": "",
+        "rating":   "",
+        "sector":   "Not yet issued",
+        "status":   "coming_soon",
+    },
 ]
 
 
 def get_fabn_list() -> list[dict]:
     """
-    Return placeholder FABN entries for the selector.
-    Real FABN identifiers will replace these once wired to the optimizer output.
+    Return the known FABN entries for the selector: the one real, currently-modeled
+    FABN, plus placeholders for future issuances. Real per-deal data (beyond the one
+    FABN this app already models) will replace the placeholders once available.
     """
-    return _STUB_FABNS
+    return _KNOWN_FABNS
 
     try:  # noqa: unreachable — kept for when real FABN data is ready
         df = _query(f"""
@@ -161,7 +187,7 @@ def get_fabn_list() -> list[dict]:
             ORDER BY CUSIP
         """)
         if df.empty:
-            return _STUB_FABNS
+            return _KNOWN_FABNS
         return [
             {
                 "cusip":    row["CUSIP"],
@@ -174,4 +200,4 @@ def get_fabn_list() -> list[dict]:
         ]
     except Exception as exc:
         logger.error("BQ FABN list query failed: %s", exc)
-        return _STUB_FABNS
+        return _KNOWN_FABNS

@@ -28,11 +28,11 @@ function ParamSlider({ symbol, label, description, value, min, max, step, format
       <div className="flex items-baseline justify-between mb-1">
         <div className="flex items-baseline gap-1.5">
           <span className="text-amber-400 font-mono text-sm font-semibold">{symbol}</span>
-          <span className="text-gray-300 text-xs">{label}</span>
+          <span className="text-text-secondary text-xs">{label}</span>
         </div>
-        <span className="text-white font-mono text-sm font-bold">{format(value)}</span>
+        <span className="text-text-primary font-mono text-sm font-bold">{format(value)}</span>
       </div>
-      <p className="text-gray-600 text-xs mb-2 leading-relaxed">{description}</p>
+      <p className="text-text-muted text-xs mb-2 leading-relaxed">{description}</p>
       <div className="relative">
         <input
           type="range"
@@ -47,7 +47,7 @@ function ParamSlider({ symbol, label, description, value, min, max, step, format
           }}
         />
       </div>
-      <div className="flex justify-between text-gray-700 text-xs mt-1">
+      <div className="flex justify-between text-text-muted text-xs mt-1">
         <span>{format(min)}</span>
         <span>{format(max)}</span>
       </div>
@@ -59,8 +59,8 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
   return (
     <div className="mt-6 mb-4">
       <p className="text-amber-400 text-xs font-semibold uppercase tracking-widest">{title}</p>
-      <p className="text-gray-600 text-xs mt-0.5">{subtitle}</p>
-      <div className="mt-2 h-px bg-gray-800" />
+      <p className="text-text-muted text-xs mt-0.5">{subtitle}</p>
+      <div className="mt-2 h-px bg-surface-2" />
     </div>
   )
 }
@@ -77,21 +77,21 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full w-80 bg-gray-950 border-r border-gray-800 z-50
+        className={`fixed top-0 left-0 h-full w-80 bg-surface-0 border-r border-border z-50
           transform transition-transform duration-300 ease-in-out flex flex-col
           ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-800">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-border">
           <div>
-            <h2 className="text-white font-semibold text-sm">Optimizer Parameters</h2>
-            <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">
-              Controls passed to the SAP optimizer via <span className="font-mono text-gray-400">/api/optimize</span>
+            <h2 className="text-text-primary font-semibold text-sm">Optimizer Parameters</h2>
+            <p className="text-text-muted text-xs mt-0.5 leading-relaxed">
+              Controls passed to the SAP optimizer via <span className="font-mono text-text-muted">/api/optimize</span>
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-800 mt-0.5"
+            className="text-text-muted hover:text-text-primary transition-colors w-7 h-7 flex items-center justify-center rounded-xl hover:bg-surface-2 mt-0.5"
           >
             ✕
           </button>
@@ -160,17 +160,32 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
             onChange={v => set('n_min', Math.round(v))}
           />
 
+          <SectionHeader
+            title="Risk Signal"
+            subtitle="Informational only — does not gate the optimizer"
+          />
+
+          <ParamSlider
+            symbol="pctl"
+            label="Trading-signal percentile"
+            description="Worth-trading trigger: 21d rolling yield vol (σ_t) vs its own trailing-year distribution. Fires when σ_t exceeds this percentile of that distribution — a rank-based cutoff, so it always selects the same fraction of historical days regardless of the vol regime's shape. Size-of-Prize default: 75th (top quartile). This only drives the banner/chart in Risk and Suggested Trades — the optimizer always re-solves regardless."
+            value={params.vol_percentile}
+            min={50} max={95} step={5}
+            format={v => `p${v.toFixed(0)}`}
+            onChange={v => set('vol_percentile', v)}
+          />
+
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-800">
+        <div className="px-5 py-4 border-t border-border">
           <button
             onClick={() => { onApply?.(); onClose() }}
-            className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold text-sm rounded-xl transition-colors"
+            className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold text-sm rounded-2xl transition-colors"
           >
             Apply & Close
           </button>
-          <p className="text-gray-700 text-xs text-center mt-2">
+          <p className="text-text-muted text-xs text-center mt-2">
             Parameters will be used on the next optimizer run
           </p>
         </div>

@@ -36,11 +36,12 @@ export interface ChatMessage {
 export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-tracking' | 'risk' | 'derivative-usage'
 
 export interface HyperParams {
-  gamma_w:  number
-  lambda_w: number
-  eps_D:    number
-  w_max:    number
-  n_min:    number
+  gamma_w:        number
+  lambda_w:       number
+  eps_D:          number
+  w_max:          number
+  n_min:          number
+  vol_percentile: number  // trading-signal threshold: worth_trading when 21d vol > this percentile of its trailing-year distribution
 }
 
 export interface Fabn {
@@ -49,6 +50,7 @@ export interface Fabn {
   maturity: string
   rating:   string
   sector:   string
+  status?:  'active' | 'coming_soon'  // absent = treated as 'active'
 }
 
 export interface BondAllocation {
@@ -161,6 +163,40 @@ export interface SwapAllocation {
   dur_contrib: number   // years (swap contribution to portfolio duration)
 }
 
+export interface CvarHistogramBin {
+  bin_mid_pct: number
+  count:       number
+}
+
+export interface SectorBreakdownEntry {
+  sector:     string
+  weight_pct: number
+}
+
+export interface SectorConcentration {
+  top_sector:     string
+  top_weight_pct: number
+  breakdown:      SectorBreakdownEntry[]
+}
+
+export interface VolPoint {
+  date:        string
+  vol_21_bps:  number
+}
+
+export interface TradingSignal {
+  series:             VolPoint[]
+  current_vol_bps:    number | null
+  median_vol_bps:     number | null   // trailing-year median of the rolling vol (for context)
+  threshold_vol_bps:  number | null   // the `percentile`-th percentile of the trailing-year vol distribution
+  ratio_to_median:    number | null
+  percentile:         number          // e.g. 75 = top-quartile cutoff
+  worth_trading:      boolean | null
+  n_obs:              number
+  lookback_n:         number
+  degraded:           boolean
+}
+
 export interface OptimizerResult {
   status:           'optimal' | 'infeasible' | 'error'
   date:             string
@@ -177,10 +213,19 @@ export interface OptimizerResult {
   c1_cost:          number
   c3_cost:          number
   txn_cost:         number
-  duration_gap:     number
+  duration_gap:     number   // bond-only |D_avg - D_FABN|, ignores swap overlay contribution
+  duration_target:  number   // D_FABN — the liability duration target
   r_FABN:           number   // FABN crediting rate (e.g. 0.03205)
   r_float:          number   // 3M Treasury / SOFR proxy
   rbc_bar:          number   // required-capital multiplier (e.g. 3.0)
+  cvar_pct:         number | null  // historical-simulation CVaR(95%), % of market value, quarterly horizon
+  cvar_var_pct:     number | null  // VaR(95%) — the tail percentile boundary (less conservative than CVaR)
+  cvar_n_obs:       number         // # of historical daily observations used
+  cvar_degraded:    boolean        // true if n_obs is too small to trust the tail estimate
+  cvar_method:      string
+  cvar_histogram:   CvarHistogramBin[]
+  trading_signal:   TradingSignal
+  sector_concentration: SectorConcentration
   allocations:      BondAllocation[]
   trades:           Trade[]
   constraints:      ConstraintResult[]
@@ -191,5 +236,8 @@ export interface OptimizerResult {
   imr_contributions: ImrContribution[]
   static_comparison: StaticComparison
   swap_allocations:  SwapAllocation[]
+  swap_notional_total:  number
+  swap_cap_notional:    number
+  swap_c3_capital_cost: number
   error?:           string
 }

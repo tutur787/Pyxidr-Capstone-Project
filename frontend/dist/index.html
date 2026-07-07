@@ -7,8 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-N1kdvNJd.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Byz_TydB.css">
+    <script>
+      // Apply the persisted theme before paint to avoid a flash of the wrong theme.
+      (function () {
+        var stored = localStorage.getItem('pyxidr-theme');
+        var dark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-CPccXrUR.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B21l3QUq.css">
   </head>
   <body>
     <div id="root"></div>
