@@ -7,3 +7,5 @@ gurobi.lic
 *.lic
 *-credentials.json
 data/output/*
+package-lock.json
+README.md
