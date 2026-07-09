@@ -74,7 +74,7 @@ LOOKBACK_DAYS = 252    # ~1 trading year, for the self-calibrating baseline
 DEFAULT_PERCENTILE = 75.0  # top-quartile cutoff, matches the notebook's quantile(0.75)
 
 PROJECT_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-PRIZE_PANELS_PATH = os.path.join(PROJECT_ROOT, 'Optimization', 'Size of the Prize', 'prize_panels.npz')
+PRIZE_PANELS_PATH = os.path.join(PROJECT_ROOT, 'Optimization', 'Size of the Prize Arthur', 'prize_panels.npz')
 
 
 def _fabn_ytm_series(date: str) -> list[float]:

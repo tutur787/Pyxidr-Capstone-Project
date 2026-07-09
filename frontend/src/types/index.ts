@@ -126,6 +126,26 @@ export interface ShadowPriceRow {
   unit:  string
 }
 
+export interface FacilityShadowPrice {
+  period: string
+  dual:   number
+}
+
+export interface IssuerShadowPrice {
+  issuer: string
+  dual:   number
+}
+
+export interface ReservationPrice {
+  cusip:             string
+  mkt_price:         number
+  reservation_price: number
+  gap:               number       // reservation_price - mkt_price ($/100 face)
+  gap_pct:           number
+  hurdle_rate:       number       // % — r*_i = book_yield_i - reduced_cost_i
+  selected:          boolean
+}
+
 export interface ImrPeriod {
   period:      string
   imr_balance: number
@@ -239,5 +259,10 @@ export interface OptimizerResult {
   swap_notional_total:  number
   swap_cap_notional:    number
   swap_c3_capital_cost: number
+  // Shadow-price / reservation-price analytics (notebook Section 3B / 3B-ii)
+  marginal_dollar_unconstrained: number | null
+  pi_facility:         FacilityShadowPrice[]
+  pi_issuer_binding:   IssuerShadowPrice[]
+  reservation_prices:  ReservationPrice[]
   error?:           string
 }

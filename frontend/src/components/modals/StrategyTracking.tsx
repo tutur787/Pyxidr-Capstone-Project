@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  ComposedChart, Bar, Line, Area,
+  ComposedChart, BarChart, Bar, Line, Area, Cell,
   ScatterChart, Scatter,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Legend,
@@ -188,6 +188,15 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
 
   // ── Shadow prices ─────────────────────────────────────────────────────────
   const shadowPrices = result?.shadow_prices ?? []
+  const budgetPi      = shadowPrices.find(r => r.label.startsWith('Budget'))?.dual ?? null
+  const marginalUnconstrained = result?.marginal_dollar_unconstrained ?? null
+  const piFacility    = result?.pi_facility ?? []
+  const piIssuerBinding = result?.pi_issuer_binding ?? []
+
+  // ── Reservation prices (per-bond shadow price, $ terms) ────────────────────
+  const reservationPrices = result?.reservation_prices ?? []
+  const [showAllRes, setShowAllRes] = useState(false)
+  const RES_PAGE = 15
 
   // ── Swap overlay ──────────────────────────────────────────────────────────
   const swapAllocs      = result?.swap_allocations ?? []
@@ -747,6 +756,71 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
           )}
         </section>
 
+        {/* ── Section LP-C: Per-Bond Reservation Price ────────────────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-text-primary font-medium text-sm">Per-Bond Reservation Price</h3>
+            <span className="text-text-muted text-xs">Same shadow price, in $/100 face terms</span>
+            <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">LP</span>
+          </div>
+          <p className="text-text-muted text-xs mb-3">
+            P* = PV of the bond's cashflows discounted at its own hurdle yield (book yield − reduced cost).
+            Gap = P* − market price: positive means the bond is worth more to this portfolio than it costs to buy.
+          </p>
+
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see per-bond reservation prices" />
+          ) : reservationPrices.length === 0 ? (
+            <EmptyState label="No reservation-price data for this solve" />
+          ) : (
+            <div className="rounded-2xl border border-border overflow-hidden">
+              <div className={`overflow-x-auto ${showAllRes ? 'overflow-y-auto max-h-[500px]' : ''}`}>
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0">
+                    <tr className="bg-surface-2/90 border-b border-border">
+                      {['CUSIP', 'Mkt Price', 'Reservation P*', 'Gap', 'Gap %', 'Hurdle Rate', ''].map(h => (
+                        <th key={h} className="px-4 py-2 text-left text-text-muted font-medium whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(showAllRes ? reservationPrices : reservationPrices.slice(0, RES_PAGE)).map((r, i) => (
+                      <tr key={i} className={`border-b border-border/60 hover:bg-surface-2/30 ${r.gap > 0 ? 'bg-emerald-500/5' : r.gap < 0 ? 'bg-red-500/5' : ''}`}>
+                        <td className="px-4 py-2.5 font-mono text-amber-400">{r.cusip}</td>
+                        <td className="px-4 py-2.5 font-mono text-text-secondary">${r.mkt_price.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 font-mono text-text-secondary">${r.reservation_price.toFixed(2)}</td>
+                        <td className={`px-4 py-2.5 font-mono font-semibold ${r.gap > 0 ? 'text-emerald-400' : r.gap < 0 ? 'text-red-400' : 'text-text-muted'}`}>
+                          {r.gap >= 0 ? '+' : ''}{r.gap.toFixed(2)}
+                        </td>
+                        <td className={`px-4 py-2.5 font-mono ${r.gap > 0 ? 'text-emerald-400' : r.gap < 0 ? 'text-red-400' : 'text-text-muted'}`}>
+                          {r.gap_pct >= 0 ? '+' : ''}{r.gap_pct.toFixed(2)}%
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-text-muted">{r.hurdle_rate.toFixed(3)}%</td>
+                        <td className="px-4 py-2.5">
+                          {r.selected && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">HELD</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {reservationPrices.length > RES_PAGE && (
+                <div className="border-t border-border bg-surface-2/60">
+                  <button
+                    onClick={() => setShowAllRes(v => !v)}
+                    className="w-full py-2 text-xs text-text-muted hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {showAllRes ? <>▲ Show fewer</> : <>▼ Show all {reservationPrices.length} (top/bottom 25 by gap)</>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* ── Section 3: Shadow Prices ───────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-1">
@@ -794,6 +868,108 @@ export default function StrategyTracking({ onClose, result, history, appliedTrad
                       </tr>
                     )
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {isOptimal && budgetPi !== null && marginalUnconstrained !== null && (
+            <div className="mt-3 p-3.5 rounded-2xl border border-border bg-surface-2/40 text-xs">
+              <p className="text-text-secondary">
+                <span className="font-medium">Marginal $ with no issuer/diversification caps:</span>{' '}
+                <span className="font-mono text-amber-400">${fmtDual(marginalUnconstrained)}</span> vs{' '}
+                <span className="font-mono text-text-secondary">${fmtDual(budgetPi)}</span> constrained
+              </p>
+              <p className="text-text-muted mt-1">
+                Dropping the 5% issuer caps would make the next dollar worth{' '}
+                <span className="font-mono text-amber-400">${fmtDual(marginalUnconstrained - budgetPi)}</span> more —
+                that's the value currently held back by diversification requirements.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* ── Section 3B: Facility Shadow Prices by Quarter ──────────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-text-primary font-medium text-sm">Facility Shadow Prices by Quarter</h3>
+          </div>
+          <p className="text-text-muted text-xs mb-3">
+            Marginal SAP value of $1 more lending-facility balance, per quarter. More negative = that quarter's
+            liquidity is most urgently needed to cover FABN payments.
+          </p>
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see facility shadow prices" />
+          ) : piFacility.length === 0 ? (
+            <EmptyState label="No facility shadow-price data for this solve" />
+          ) : (() => {
+            const tightest = piFacility.reduce((min, row) => row.dual < min.dual ? row : min, piFacility[0])
+            return (
+              <>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={piFacility} margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
+                      <CartesianGrid stroke="#1f2937" vertical={false} />
+                      <XAxis dataKey="period" tick={{ fill: '#6b7280', fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={v => v.toFixed(3)} width={48} />
+                      <Tooltip
+                        contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
+                        formatter={(v: number) => [v.toFixed(4), 'Shadow price']}
+                      />
+                      <ReferenceLine y={0} stroke="#4b5563" />
+                      <Bar dataKey="dual" maxBarSize={28} radius={[3, 3, 0, 0]}>
+                        {piFacility.map((row, idx) => (
+                          <Cell key={idx} fill={row.dual < -1e-6 ? '#ef4444' : row.dual > 1e-6 ? '#10b981' : '#6b7280'} opacity={0.8} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-text-muted text-xs mt-2 text-center">
+                  Tightest funding quarter: <span className="text-red-400 font-mono">{tightest.period}</span>{' '}
+                  (shadow price {tightest.dual.toFixed(4)})
+                </p>
+              </>
+            )
+          })()}
+        </section>
+
+        {/* ── Section 3C: Issuer Concentration Caps ──────────────────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-text-primary font-medium text-sm">Issuer Concentration Caps</h3>
+          </div>
+          <p className="text-text-muted text-xs mb-3">
+            Issuers where the 5% single-issuer cap is actively binding — the optimizer wants to hold more than the
+            cap allows. "$ if cap +1pp" is the SAP gain from relaxing that issuer's cap by one percentage point.
+          </p>
+          {!isOptimal ? (
+            <EmptyState label="Run optimizer to see issuer concentration caps" />
+          ) : piIssuerBinding.length === 0 ? (
+            <div className="h-16 bg-surface-2/40 rounded-2xl border border-border border-dashed flex items-center justify-center">
+              <p className="text-text-muted text-sm">No issuer caps are currently binding</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-surface-2/80 border-b border-border">
+                    <th className="px-4 py-2.5 text-left text-text-muted font-medium">Issuer (6-char CUSIP)</th>
+                    <th className="px-4 py-2.5 text-right text-text-muted font-medium">Shadow Price</th>
+                    <th className="px-4 py-2.5 text-right text-text-muted font-medium">$ if cap +1pp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {piIssuerBinding.map((row, i) => (
+                    <tr key={i} className="border-b border-border/60 hover:bg-surface-2/30 bg-amber-500/5">
+                      <td className="px-4 py-3 font-mono text-amber-300">{row.issuer}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold text-amber-400">
+                        ${fmtDual(row.dual)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-text-secondary">
+                        {fmt$(Math.abs(row.dual) * 0.01 * 500_000_000)}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

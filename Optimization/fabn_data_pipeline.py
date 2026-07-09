@@ -37,7 +37,7 @@ PROJECT_ID = "insurance-backed-securities"
 DATASET    = "Securities"
 
 client = bigquery.Client(project=PROJECT_ID)
-print(f"Connected: {client.project}")
+# print(f"Connected: {client.project}")
 
 # =============================================================================
 # 1 — Parameters
@@ -67,10 +67,10 @@ alpha_w  = 0.0   # α : C3 duration mismatch scaling (0 until C3 is active)
 lambda_w = 0.05  # λ : CF shortfall penalty weight
 eps_D    = 0.3   # duration tolerance band (years)
 
-print(f"Optimization date  : {optimization_date.date()}")
-print(f"FABN issue/maturity: {FABN_ISSUE.date()} → {FABN_MATURITY.date()}")
-print(f"Budget H           : ${H:,.0f}")
-print(f"r_FABN             : {r_FABN*100:.3f}%")
+# print(f"Optimization date  : {optimization_date.date()}")
+# print(f"FABN issue/maturity: {FABN_ISSUE.date()} → {FABN_MATURITY.date()}")
+# print(f"Budget H           : ${H:,.0f}")
+# print(f"r_FABN             : {r_FABN*100:.3f}%")
 
 # =============================================================================
 # 2 — Bond Universe from Agg_Fixed_Field
@@ -99,8 +99,8 @@ CUSIPS    = fixed["CUSIP"].tolist()
 N         = len(CUSIPS)
 cusip_idx = {c: i for i, c in enumerate(CUSIPS)}
 
-print(f"Universe size N = {N} bonds")
-print(fixed.head())
+# print(f"Universe size N = {N} bonds")
+# print(fixed.head())
 
 # =============================================================================
 # 3 — Spreads from Agg_Spread_Long
@@ -131,9 +131,9 @@ spread_bps = np.array([spread_map.get(c, np.nan) for c in CUSIPS])
 spread     = spread_bps / 10_000.0
 
 missing_spread = np.isnan(spread).sum()
-print(f"Spread coverage : {N - missing_spread}/{N} bonds  ({missing_spread} missing)")
-print(f"Spread range    : {spread_bps[~np.isnan(spread_bps)].min():.1f} – "
-      f"{spread_bps[~np.isnan(spread_bps)].max():.1f} bps")
+# print(f"Spread coverage : {N - missing_spread}/{N} bonds  ({missing_spread} missing)")
+# print(f"Spread range    : {spread_bps[~np.isnan(spread_bps)].min():.1f} – "
+      # f"{spread_bps[~np.isnan(spread_bps)].max():.1f} bps")
 
 # =============================================================================
 # 4 — Cashflow Matrix from Asset_Cashflows
@@ -148,8 +148,8 @@ WHERE PaymentDate > '{optimization_date.date()}'
 cf_raw = client.query(sql_cf).to_dataframe()
 cf_raw["PaymentDate"] = pd.to_datetime(cf_raw["PaymentDate"])
 
-print(f"Cashflow rows loaded : {len(cf_raw):,}")
-print(f"Date range           : {cf_raw['PaymentDate'].min().date()} → {cf_raw['PaymentDate'].max().date()}")
+# print(f"Cashflow rows loaded : {len(cf_raw):,}")
+# print(f"Date range           : {cf_raw['PaymentDate'].min().date()} → {cf_raw['PaymentDate'].max().date()}")
 
 # Daily cashflow matrix (T × N)
 cf_agg = (
@@ -167,7 +167,7 @@ t_dates = cf_pivot.index
 t_vec   = (t_dates - optimization_date).days.values / 365.25
 T       = len(t_dates)
 
-print(f"bond_cf shape : {bond_cf.shape}  (T={T} payment dates × N={N} bonds)")
+# print(f"bond_cf shape : {bond_cf.shape}  (T={T} payment dates × N={N} bonds)")
 
 # Quarterly cashflow matrix (Q × N)
 cf_agg["Quarter"] = cf_agg["PaymentDate"].dt.to_period("Q")
@@ -183,14 +183,15 @@ qtr_pivot = (
 qtr_bond_cf = qtr_pivot.values
 qtr_idx     = qtr_pivot.index
 Q           = len(qtr_idx)
+fabn_q      = int(qtr_idx.get_loc(pd.Period(FABN_MATURITY, freq="Q")) + 1)  # quarters through FABN maturity (reinvestment horizon)
 
-print(f"qtr_bond_cf shape : {qtr_bond_cf.shape}  (Q={Q} quarters × N={N} bonds)")
+# print(f"qtr_bond_cf shape : {qtr_bond_cf.shape}  (Q={Q} quarters × N={N} bonds)")
 
 # Convert from per-$100 face to per-$1 face
 bond_cf     = bond_cf     / 100.0
 qtr_bond_cf = qtr_bond_cf / 100.0
 
-print(f"Quarter range     : {qtr_idx[0]} → {qtr_idx[-1]}")
+# print(f"Quarter range     : {qtr_idx[0]} → {qtr_idx[-1]}")
 
 # =============================================================================
 # 5 — Duration
@@ -223,20 +224,20 @@ def _fetch_treasury_curve(n_retries=3):
                 raise ValueError("FRED returned no rows in the date window")
             day_diff = np.abs((raw.index - optimization_date).days)
             row = raw.iloc[day_diff.argmin()]
-            print(f"Treasury curve date used : {row.name.date()}  (FRED, attempt {attempt})")
+            # print(f"Treasury curve date used : {row.name.date()}  (FRED, attempt {attempt})")
             return row
         except Exception as e:
             last_err = e
-            print(f"  FRED fetch attempt {attempt}/{n_retries} failed: {type(e).__name__}")
+            # print(f"  FRED fetch attempt {attempt}/{n_retries} failed: {type(e).__name__}")
             if attempt < n_retries:
                 time.sleep(2 * attempt)
-    print(f"  WARNING: FRED unreachable ({type(last_err).__name__}). "
-          f"Using STATIC fallback Treasury curve (~2025-01-15).")
+    # print(f"  WARNING: FRED unreachable ({type(last_err).__name__}). "
+          # f"Using STATIC fallback Treasury curve (~2025-01-15).")
     return pd.Series(FRED_FALLBACK, index=MATURITIES_YRS, name=optimization_date)
 
 
 rf_row = _fetch_treasury_curve()
-print(rf_row.rename(lambda t: f"{t:.3f}yr").to_string())
+# print(rf_row.rename(lambda t: f"{t:.3f}yr").to_string())
 
 valid     = rf_row.dropna()
 rf_interp = interp1d(
@@ -259,10 +260,10 @@ durs         = np.where(np.isnan(mod_dur_calc), bbg_dur, mod_dur_calc)
 
 n_computed = int((~np.isnan(mod_dur_calc)).sum())
 n_fallback = int(np.isnan(mod_dur_calc).sum())
-print(f"\nDuration computed from cashflows : {n_computed}")
-print(f"Duration from BBG fallback       : {n_fallback}")
-print(f"Duration range                   : {np.nanmin(durs):.2f} – {np.nanmax(durs):.2f} yrs")
-print(f"Mean bond yield used             : {np.nanmean(yield_per_bond)*100:.3f}%")
+# print(f"\nDuration computed from cashflows : {n_computed}")
+# print(f"Duration from BBG fallback       : {n_fallback}")
+# print(f"Duration range                   : {np.nanmin(durs):.2f} – {np.nanmax(durs):.2f} yrs")
+# print(f"Mean bond yield used             : {np.nanmean(yield_per_bond)*100:.3f}%")
 
 # =============================================================================
 # 6 — C1 Capital Factor (theta)
@@ -275,10 +276,10 @@ n_default = int(sum(
     for s, m in zip(fixed["rating_sp"].values, fixed["rating_moodys"].values)
 ))
 
-print(f"theta range : {theta.min():.5f} – {theta.max():.5f}")
-print(f"Mean C1     : {theta.mean():.5f}  ({theta.mean()*100:.3f}%)")
-print(f"Rating source : {n_sp} S&P, {theta.size - n_sp - n_default} Moody's fallback, "
-      f"{n_default} BBB default")
+# print(f"theta range : {theta.min():.5f} – {theta.max():.5f}")
+# print(f"Mean C1     : {theta.mean():.5f}  ({theta.mean()*100:.3f}%)")
+# print(f"Rating source : {n_sp} S&P, {theta.size - n_sp - n_default} Moody's fallback, "
+      # f"{n_default} BBB default")
 
 # =============================================================================
 # 7 — Current Allocations, Signal, Transaction Costs
@@ -290,7 +291,7 @@ h_curr = np.full(N, H / N)
 tau    = np.zeros(N)
 signal = np.zeros(N)
 
-print(f"h_curr (equal-weight) : ${H/N:,.2f} per bond")
+# print(f"h_curr (equal-weight) : ${H/N:,.2f} per bond")
 
 # =============================================================================
 # 8 — FABN Liability Cashflow Schedule & D_FABN
@@ -310,21 +311,21 @@ fabn_cf_full = pd.DataFrame({
 })
 fabn_cf_full["total"] = fabn_cf_full["coupon"] + fabn_cf_full["principal"]
 
-print("Full FABN schedule (per 100 face):")
-print(fabn_cf_full.to_string(index=False))
+# print("Full FABN schedule (per 100 face):")
+# print(fabn_cf_full.to_string(index=False))
 
 fabn_future = fabn_cf_full[fabn_cf_full["date"] > optimization_date].copy()
 fabn_future["t_years"] = (fabn_future["date"] - optimization_date).dt.days / 365.25
 
-print(f"\nFuture payments from {optimization_date.date()}:")
-print(fabn_future[["date", "coupon", "principal", "total", "t_years"]].to_string(index=False))
+# print(f"\nFuture payments from {optimization_date.date()}:")
+# print(fabn_future[["date", "coupon", "principal", "total", "t_years"]].to_string(index=False))
 
 total_pv   = fabn_future["total"].sum()
 mac_D_FABN = (fabn_future["t_years"] * fabn_future["total"]).sum() / total_pv
 D_FABN     = mac_D_FABN / (1 + r_FABN / 2)
 
-print(f"\nMacaulay D_FABN : {mac_D_FABN:.4f} yrs")
-print(f"Modified D_FABN : {D_FABN:.4f} yrs  ← used in optimizer")
+# print(f"\nMacaulay D_FABN : {mac_D_FABN:.4f} yrs")
+# print(f"Modified D_FABN : {D_FABN:.4f} yrs  ← used in optimizer")
 
 fabn_future["quarter"] = fabn_future["date"].dt.to_period("Q")
 fabn_qtr_series = fabn_future.groupby("quarter")["total"].sum()
@@ -334,15 +335,16 @@ qtr_fabn_cf = np.array([
     for q in qtr_idx
 ])
 
-print(f"\nqtr_fabn_cf (${H/1e6:.0f}M face, non-zero quarters):")
+# print(f"\nqtr_fabn_cf (${H/1e6:.0f}M face, non-zero quarters):")
 for q, v in zip(qtr_idx, qtr_fabn_cf):
     if v > 0:
-        print(f"  {q}  ${v:>14,.2f}")
+        pass
+        # print(f"  {q}  ${v:>14,.2f}")
 
 score = spread + beta_w * signal
 
-print(f"\nscore range : {score[~np.isnan(score)].min()*10000:.1f} – "
-      f"{score[~np.isnan(score)].max()*10000:.1f} bps")
+# print(f"\nscore range : {score[~np.isnan(score)].min()*10000:.1f} – "
+      # f"{score[~np.isnan(score)].max()*10000:.1f} bps")
 
 # =============================================================================
 # 9 — Validation
@@ -366,13 +368,15 @@ for name, result in checks:
     status = "PASS" if result else "FAIL"
     if not result:
         all_pass = False
-    print(f"  [{status}]  {name}")
+    # print(f"  [{status}]  {name}")
 
-print()
+# print()
 if all_pass:
-    print("All checks passed — pipeline ready.")
+    pass
+    # print("All checks passed — pipeline ready.")
 else:
-    print("Some checks FAILED — review before running the optimizer.")
+    pass
+    # print("Some checks FAILED — review before running the optimizer.")
 
 # NaN-fill spreads with sector median before passing to optimizer
 sector_map     = fixed.set_index("CUSIP")["sector"]
@@ -382,7 +386,7 @@ spread_clean   = spread_series.fillna(sector_medians).fillna(spread_series.media
 score_clean    = spread_clean + beta_w * signal
 
 n_filled = np.isnan(spread).sum()
-print(f"NaN spreads filled with sector median : {n_filled}")
+# print(f"NaN spreads filled with sector median : {n_filled}")
 
 # =============================================================================
 # 9.5 — Prices, Book Yield, Amortization & Bid-Ask Transaction Costs
@@ -444,15 +448,15 @@ tau = np.where(tau_valid, tau, np.nan)
 tau = np.where(np.isnan(tau), np.nanmedian(tau), tau)
 
 n_mid = int((~np.isnan(mid_raw)).sum())
-print(f"Mid price coverage : {n_mid}/{N} bonds  ({N - n_mid} filled at par)")
-print(f"Book yield IRR     : {N - n_irr_fail}/{N} solved  ({n_irr_fail} fell back to rf+spread)")
-print(f"Bid-ask tau        : {N - n_tau_fill}/{N} from quotes  ({n_tau_fill} median-filled)")
-print(f"Book yield         : {np.nanmin(book_yield)*100:.2f}% – {np.nanmax(book_yield)*100:.2f}%  "
-      f"(mean {np.nanmean(book_yield)*100:.2f}%)")
-print(f"Coupon yield mean  : {np.nanmean(coupon_inc)*100:.2f}%   "
-      f"Amort yield mean : {np.nanmean(amort_inc)*100:+.3f}%")
-print(f"Bid-ask tau        : {np.nanmin(tau)*1e4:.1f} – {np.nanmax(tau)*1e4:.1f} bps  "
-      f"(mean {np.nanmean(tau)*1e4:.1f} bps)")
+# print(f"Mid price coverage : {n_mid}/{N} bonds  ({N - n_mid} filled at par)")
+# print(f"Book yield IRR     : {N - n_irr_fail}/{N} solved  ({n_irr_fail} fell back to rf+spread)")
+# print(f"Bid-ask tau        : {N - n_tau_fill}/{N} from quotes  ({n_tau_fill} median-filled)")
+# print(f"Book yield         : {np.nanmin(book_yield)*100:.2f}% – {np.nanmax(book_yield)*100:.2f}%  "
+      # f"(mean {np.nanmean(book_yield)*100:.2f}%)")
+# print(f"Coupon yield mean  : {np.nanmean(coupon_inc)*100:.2f}%   "
+      # f"Amort yield mean : {np.nanmean(amort_inc)*100:+.3f}%")
+# print(f"Bid-ask tau        : {np.nanmin(tau)*1e4:.1f} – {np.nanmax(tau)*1e4:.1f} bps  "
+      # f"(mean {np.nanmean(tau)*1e4:.1f} bps)")
 
 # =============================================================================
 # 10 — Pipeline Output
@@ -462,6 +466,7 @@ pipeline = {
     "N":              N,
     "T":              T,
     "Q":              Q,
+    "fabn_q":         fabn_q,        # quarters through FABN maturity (reinvestment horizon)
     "CUSIPS":         CUSIPS,
     "fixed":          fixed,
 
@@ -516,5 +521,5 @@ summary = pd.DataFrame([
     ["Budget H ($M)",              H / 1e6,                            ""],
 ], columns=["Metric", "Value", "Notes"])
 
-print(summary.to_string())
-print("\npipeline dict ready.")
+# print(summary.to_string())
+# print("\npipeline dict ready.")

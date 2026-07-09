@@ -173,7 +173,6 @@ def _solve(
 
     # ── 1A. Unpack pipeline ────────────────────────────────────────────────
     N           = pipeline["N"]
-    Q           = pipeline["Q"]
     CUSIPS      = pipeline["CUSIPS"]
     book_yield  = pipeline["book_yield"]   # (N,) effective-interest yield
     coupon_inc  = pipeline["coupon_inc"]   # (N,) statutory coupon yield
@@ -192,6 +191,19 @@ def _solve(
     D_FABN      = pipeline["D_FABN"]
     RBC_bar     = pipeline["RBC_bar"]
     fixed_df    = pipeline["fixed"].set_index("CUSIP")
+
+    # Truncate the quarterly grid to the FABN's own maturity horizon. Without this,
+    # Q spans however far the bond universe's cashflows run (driven by long-maturity
+    # bonds already excluded from holding via post_fabn_mask below), and the facility
+    # balance keeps compounding "savings_income" for phantom quarters after the FABN
+    # liability itself has matured — inflating the SAP objective. Matches the
+    # notebook's Section 1A truncation exactly.
+    _fabn_qtr   = pd.Period(_FABN_MATURITY, freq="Q")
+    _keep       = qtr_idx <= _fabn_qtr
+    qtr_bond_cf = qtr_bond_cf[_keep]
+    qtr_fabn_cf = qtr_fabn_cf[_keep]
+    qtr_idx     = qtr_idx[_keep]
+    Q           = len(qtr_idx)
 
     # ── 1B. SAP parameters from user inputs ───────────────────────────────
     # gamma_w is cost_of_capital (insurer WACC); lambda_cap = WACC * RBC_bar
@@ -531,6 +543,62 @@ def _solve(
     swap_cap_notional    = float(v_max_frac * H)
     swap_c3_capital_cost = float(lambda_cap * mu_swap * swap_notional_total)
 
+    # ── 4c. Shadow-price analytics (matches notebook Section 3B / 3B-ii) ────
+    # Cheap additions only: one extra re-solve for the issuer-cap-relaxed marginal
+    # dollar, plus reading duals/reduced-costs already available from the base
+    # solve. The notebook's Section 3B-iii budget-H sensitivity sweep (~120 extra
+    # LP solves) is NOT ported here — it's an offline research tool, not viable
+    # inside a synchronous API request; it stays in fabn_optimizer_sap.py only.
+    rc = np.array([h[i].RC for i in range(N)])
+
+    _m_unconstr = model.copy()
+    _m_unconstr.Params.OutputFlag = 0
+    for issuer in issuer_groups:
+        _m_unconstr.getConstrByName(f"concentration_{issuer}").RHS = GRB.INFINITY
+    _m_unconstr.optimize()
+    marginal_dollar_unconstrained = (
+        round(float(_m_unconstr.getConstrByName("budget").Pi), 6)
+        if _m_unconstr.Status == GRB.OPTIMAL else None
+    )
+
+    pi_facility = [
+        {"period": str(qtr_idx[q]), "dual": _safe_pi(f"facility_{q}") or 0.0}
+        for q in range(Q)
+    ]
+    pi_issuer = sorted(
+        (
+            {"issuer": issuer, "dual": _safe_pi(f"concentration_{issuer}") or 0.0}
+            for issuer in issuer_groups
+        ),
+        key=lambda x: abs(x["dual"]), reverse=True,
+    )
+    pi_issuer_binding = [row for row in pi_issuer if abs(row["dual"]) > 1e-6][:10]
+
+    # Per-bond reservation price P*_i = PV(bond cashflows @ hurdle yield r*_i),
+    # r*_i = book_yield_i - reduced_cost_i. Gap = P* - market price: positive
+    # means the bond is worth more to this portfolio than its market price.
+    r_star = book_yield - rc
+    t_q_arr = np.array(t_quarters)
+    reservation_prices: list[dict] = []
+    for i in range(N):
+        if post_fabn_mask[i]:
+            continue
+        cfs = qtr_bond_cf[:, i]
+        if cfs.sum() < 1e-12 or r_star[i] <= -1:
+            continue
+        p_star = float((cfs * (1.0 + r_star[i]) ** (-t_q_arr)).sum()) * 100.0
+        gap = p_star - float(price[i])
+        reservation_prices.append({
+            "cusip":           CUSIPS[i],
+            "mkt_price":       round(float(price[i]), 3),
+            "reservation_price": round(p_star, 3),
+            "gap":             round(gap, 3),
+            "gap_pct":         round(gap / float(price[i]) * 100, 3) if price[i] else 0.0,
+            "hurdle_rate":     round(float(r_star[i]) * 100, 4),
+            "selected":        bool(h_opt[i] > 1.0),
+        })
+    reservation_prices.sort(key=lambda x: x["gap"], reverse=True)
+
     # ── 5. IMR schedule ────────────────────────────────────────────────────
     # For each SELL trade, realized gain enters the IMR and amortizes over
     # the sold bond's remaining life. book_price = 100 (par) since h_curr is
@@ -646,4 +714,12 @@ def _solve(
         "swap_notional_total":  round(swap_notional_total, 2),
         "swap_cap_notional":    round(swap_cap_notional, 2),
         "swap_c3_capital_cost": round(swap_c3_capital_cost, 2),
+        # Shadow-price / reservation-price analytics (notebook Section 3B / 3B-ii)
+        "marginal_dollar_unconstrained": marginal_dollar_unconstrained,
+        "pi_facility":         pi_facility,
+        "pi_issuer_binding":   pi_issuer_binding,
+        # Top 25 (most underpriced for us) + bottom 25 (most overpriced) by gap,
+        # matching the notebook's Table 3 top-20/bottom-20 — full N-bond list isn't
+        # needed by the UI and would bloat the payload.
+        "reservation_prices":  reservation_prices[:25] + reservation_prices[-25:],
     }
