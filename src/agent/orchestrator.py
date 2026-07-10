@@ -72,8 +72,10 @@ def _handle_run(req: RunRequest, *, session: AgentSession) -> AgentResponse:
             "budget_usd": params.H,
             "duration_band_years": params.eps_D,
             "rbc_target": params.RBC_bar,
-            "cf_penalty_weight": params.lambda_w,
-            "capital_cost_weight": params.gamma_w,
+            "cost_of_capital": params.gamma_w,
+            "savings_rate_scalar": params.lambda_w,
+            "w_max": params.w_max,
+            "n_min": params.n_min,
         }
         return AgentResponse(
             ok=True,
@@ -105,6 +107,15 @@ def _handle_select(req: SelectRequest, *, session: AgentSession) -> AgentRespons
 
     assert session.last_job is not None
     data = execute_select(req, session.last_job)
+
+    if req.query_id == "contribution_analysis" and "by_sector" in data:
+        try:
+            from agent.qwen_translator import generate_narrative
+            data["narrative"] = generate_narrative(json.dumps(data))
+        except Exception as exc:  # noqa: BLE001
+            data["narrative"] = None
+            data["narrative_error"] = str(exc)
+
     return AgentResponse(ok=True, message=f"Query {req.query_id} complete.", data=data)
 
 

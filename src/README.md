@@ -1,10 +1,6 @@
 # FABN optimization (`src/`)
 
-
-
-This folder holds the **production-style** Python entrypoint for the Funding Agreement-Backed Notes (FABN) portfolio workflow: pull market and liability inputs, build arrays for the solver, run a **Gurobi** linear program, and write results to disk.
-
-The notebooks under `Optimization/` are the original exploratory versions; behavior should stay aligned by changing code **here** first, then refreshing notebooks to import these modules if needed. 
+Self-contained production Python for the FABN SAP portfolio workflow: BigQuery inputs, Gurobi solve, CSV export. The `Optimization/` folder remains for notebooks and exploratory work; the Docker image only needs `src/`.
 
 ## Flow
 
@@ -12,51 +8,57 @@ The notebooks under `Optimization/` are the original exploratory versions; behav
 optimization.py          Entrypoint (Docker CMD)
     │
     ├─► fabn_pipeline.build_pipeline()
-    │       BigQuery (universe, spreads, cashflows)
-    │       FRED Treasury curve → durations
-    │       C1 rating factors, FABN liability schedule
-    │       → returns pipeline dict
+    │       BigQuery + FRED → pipeline dict
     │
-    ├─► fabn_optimizer.solve_fabn_nev(pipeline)
-    │       Builds & solves LP (budget, RBC, duration band, CF shortfall, …)
-    │       → returns (model, FabnSolveResult)
+    ├─► fabn_sap_solve.solve_sap()
+    │       Gurobi SAP LP → result dict (allocations, trades, cashflows, …)
     │
-    └─► fabn_optimizer.export_fabn_results(...)
-            Writes CSVs under DATA_OUTPUT_DIR when status is optimal
+    └─► fabn_optimizer_sap.export_fabn_results(...)
+            Writes CSVs under DATA_OUTPUT_DIR when optimal
+
+agent_cli.py             Optional NL / JSON orchestration (see agent/)
+    └─► fabn_job.run_fabn_job() → same pipeline + solve + export
+            SELECT queries on last job (summary, holdings delta, recommended trades)
 ```
 
 ## Modules
 
+| File | Role |
+|------|------|
+| `optimization.py` | Logging + `run_fabn_job()` entrypoint |
+| `fabn_pipeline.py` | `FabnPipelineParams`, `build_pipeline()` |
+| `fabn_finance.py` | Book yield, duration, C-1 factors |
+| `fabn_sap_solve.py` | `solve_sap()` — Gurobi model; builds `trades` buy/sell list |
+| `fabn_optimizer_sap.py` | `FabnSolveResult`, `load_pipeline`, `export_fabn_results` |
+| `fabn_job.py` | `run_fabn_job()` — used by the agent |
+| `agent/` | Orchestration agent — [`agent/README.md`](agent/README.md) |
+| `agent_cli.py` | CLI: `run`, `select`, `chat` |
 
-| File                    | Role                                                                                                                                                                                                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `**optimization.py**`   | Configures logging, wires BigQuery client → pipeline → solve → export. Run as `python src/optimization.py` from the project root (or via Docker).                                                                                  |
-| `**fabn_pipeline.py**`  | `**FabnPipelineParams**` (defaults + `**from_env()**` for `GCP_PROJECT_ID`, `BIGQUERY_DATASET`, `FABN_OPTIMIZATION_DATE`). `**build_pipeline(client, params)**` returns the `**pipeline**` dict consumed by the optimizer.         |
-| `**fabn_optimizer.py**` | `**solve_fabn_nev**` builds the Gurobi model; `**FabnSolveResult**` holds scalar summaries and `**h_opt**`. `**export_fabn_results**` writes `**optimizer_results.csv**` (per bond) and `**nev_summary.csv**` (aggregate metrics). |
+## Solver output
 
+When optimal, `solve_sap()` returns a dict including:
 
-## The `pipeline` dict
+| Key | Description |
+|-----|-------------|
+| `allocations` | Per-bond optimal holdings (`h_opt`, `h_curr`, weight, spread, duration, …) |
+| **`trades`** | Recommended buys/sells for the optimization date: bonds with \|Δ\| > $100k, top 15 buys + top 15 sells. Each row has `action` (`BUY`/`SELL`), `cusip`, `sector`, `rating`, `delta_usd`, `delta_weight_pct`, `spread_bps`, `duration`. |
+| `cashflows` | Quarterly asset vs FABN liability cashflows |
+| `sap_val`, `nii_val`, … | Objective components and portfolio metrics |
 
-`build_pipeline` returns one dictionary aligned with the notebook “pipeline output”: dimensions (`N`, `T`, `Q`), `**CUSIPS**`, per-bond arrays (`spread`, `durs`, `theta`, `score`, `h_curr`, …), cashflow matrices (`bond_cf`, `qtr_bond_cf`, `qtr_fabn_cf`, `t_vec`, `qtr_idx`), and scalar parameters (`H`, `D_FABN`, `gamma_w`, `eps_D`, …). The optimizer reads keys by name; keep keys stable if you extend the model.
+`FabnSolveResult.from_raw()` keeps the full dict on `solve.raw` (including `trades`) for the agent and API consumers.
 
-## Inputs vs outputs
+## File outputs
 
-- **Inputs today:** **BigQuery** (configured project/dataset) and **FRED** (via `pandas_datareader`) for the Treasury curve. **Application Default Credentials** are expected (e.g. `gcloud auth application-default login`, or mounted credentials in Docker).
-- `**DATA_INPUT_DIR`:** Reserved for a future “load from local files” path; the current pipeline **does not** read bond CSVs from disk.
-- **Outputs:** `**DATA_OUTPUT_DIR`** (default `/app/data/output` in the image). With Compose, this is typically mounted to `./data/output` on the host. Files appear only when Gurobi returns an **optimal** solution.
+`DATA_OUTPUT_DIR` (default `./data/output` locally; `/app/data/output` in Docker): `optimizer_results.csv`, `sap_summary.csv` when optimal. Trade recommendations are available in the solve result and via the agent `recommended_trades` query — not written to a separate CSV today.
 
-## Environment variables (common)
+## Agent
 
-See also the docstring at the top of `**optimization.py`**.
+Natural-language and structured queries over the same pipeline live under [`agent/`](agent/README.md). After a confirmed run, use `select` with `query_id: "recommended_trades"` (or ask in chat) to list suggested buy/sell bonds for that date.
 
+## Tests
 
-| Variable                                            | Purpose                                     |
-| --------------------------------------------------- | ------------------------------------------- |
-| `GCP_PROJECT_ID`, `BIGQUERY_DATASET`                | BigQuery location                           |
-| `FABN_OPTIMIZATION_DATE`                            | As-of date (`YYYY-MM-DD`)                   |
-| `DATA_OUTPUT_DIR`                                   | Where CSV exports are written               |
-| `LOG_LEVEL`                                         | Python logging level (e.g. `INFO`, `DEBUG`) |
-| `GRB_WLSACCESSID`, `GRB_WLSSECRET`, `GRB_LICENSEID` | Gurobi WLS license (containerized runs)     |
+Unit tests for the agent (schemas, SELECT catalog, Qwen JSON helpers) live in [`../tests/`](../tests/README.md). They run without Gurobi, BigQuery, or live HF API calls:
 
-
-`GCS_*` bucket variables are placeholders for future upload/download logic and are not used by the current `fabn_*` modules.
+```bash
+PYTHONPATH=src pytest tests/ -q
+```
