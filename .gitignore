@@ -7,3 +7,5 @@ gurobi.lic
 *.lic
 *-credentials.json
 data/output/*
+package-lock.json
+Optimization/Size of the Prize Arthur
