@@ -1,0 +1,60 @@
+#! optimization-deployment.yaml
+# Generated code, do not edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: optimization
+    namespace: pyxidr-capstone-project
+    labels:
+        com.docker.compose.project: pyxidr-capstone-project
+        com.docker.compose.service: optimization
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            com.docker.compose.project: pyxidr-capstone-project
+            com.docker.compose.service: optimization
+    strategy:
+        type: Recreate
+    template:
+        metadata:
+            labels:
+                com.docker.compose.project: pyxidr-capstone-project
+                com.docker.compose.service: optimization
+                com.docker.compose.network.default: "true"
+        spec:
+            containers:
+                - name: optimization
+                  image: pyxidr-capstone-project-optimization
+                  imagePullPolicy: IfNotPresent
+                  env:
+                    - name: DATA_INPUT_DIR
+                      value: "/app/data/input"
+                    - name: DATA_OUTPUT_DIR
+                      value: "/app/data/output"
+                    - name: GCP_PROJECT_ID
+                      value: ""
+                    - name: GCS_INPUT_BUCKET
+                      value: ""
+                    - name: GCS_OUTPUT_BUCKET
+                      value: ""
+                    - name: GRB_LICENSEID
+                      value: ""
+                    - name: GRB_WLSACCESSID
+                      value: ""
+                    - name: GRB_WLSSECRET
+                      value: ""
+                  volumeMounts:
+                    - name: app-data-output
+                      mountPath: /app/data/output
+                    - name: root--config-gcloud
+                      mountPath: /root/.config/gcloud
+                      readOnly: true
+            volumes:
+                - name: app-data-output
+                  hostPath:
+                    path: /Users/eloibernier/Documents/MS-ADS/2026_Spring/Capstone_I/Repo/Pyxidr-Capstone-Project/data/output
+                - name: root--config-gcloud
+                  hostPath:
+                    path: /Users/eloibernier/.config/gcloud
+                  readOnly: true
