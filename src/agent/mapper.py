@@ -21,10 +21,14 @@ def run_request_to_params(
         updates["eps_D"] = req.duration_band_years
     if req.rbc_target is not None:
         updates["RBC_bar"] = req.rbc_target
-    if req.cf_penalty_weight is not None:
-        updates["lambda_w"] = req.cf_penalty_weight
-    if req.capital_cost_weight is not None:
-        updates["gamma_w"] = req.capital_cost_weight
+    if req.cost_of_capital is not None:
+        updates["gamma_w"] = req.cost_of_capital
+    if req.savings_rate_scalar is not None:
+        updates["lambda_w"] = req.savings_rate_scalar
+    if req.w_max is not None:
+        updates["w_max"] = req.w_max
+    if req.n_min is not None:
+        updates["n_min"] = req.n_min
     return FabnPipelineParams(
         project_id=p.project_id,
         dataset=p.dataset,

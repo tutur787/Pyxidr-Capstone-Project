@@ -16,12 +16,19 @@ def test_run_request_roundtrip_json() -> None:
         {
             "optimization_date": "2025-01-15",
             "budget_usd": 400_000_000,
+            "cost_of_capital": 0.15,
+            "savings_rate_scalar": 1.0,
+            "w_max": 0.05,
+            "n_min": 20,
             "confirm": False,
         }
     )
     req = RunRequest.model_validate_json(raw)
     assert req.optimization_date == date(2025, 1, 15)
     assert req.budget_usd == 400_000_000
+    assert req.cost_of_capital == 0.15
+    assert req.w_max == 0.05
+    assert req.n_min == 20
 
 
 def test_validate_rejects_future_date() -> None:
@@ -37,3 +44,9 @@ def test_agent_turn_select() -> None:
     )
     assert turn.select is not None
     assert turn.select.query_id == "summary_metrics"
+
+
+def test_select_request_recommended_trades() -> None:
+    req = SelectRequest(query_id="recommended_trades", limit=20)
+    assert req.query_id == "recommended_trades"
+    assert req.limit == 20

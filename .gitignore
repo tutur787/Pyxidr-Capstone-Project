@@ -9,3 +9,5 @@ gurobi.lic
 data/output/*
 package-lock.json
 Optimization/Size of the Prize Arthur
+node_modules/
+frontend/dist/
