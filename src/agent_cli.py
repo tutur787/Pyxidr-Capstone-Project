@@ -4,6 +4,7 @@ FABN agent CLI — structured JSON or natural language (HF Inference API).
 
 Examples:
   python src/agent_cli.py turn --json '{"intent":"run","run":{"optimization_date":"2025-01-15","confirm":false}}'
+  python src/agent_cli.py explain --json '{"question":"why is duration hedged with a swap?"}'
   python src/agent_cli.py chat --message "Run optimization as of 2025-01-15 with 500 million budget"
   python src/agent_cli.py chat --repl
 """
@@ -23,7 +24,7 @@ from agent.orchestrator import (
     translate_user_message,
 )
 from agent.qwen_translator import TranslationError
-from agent.schemas import AgentTurn, RunRequest, SelectRequest
+from agent.schemas import AgentTurn, ExplainRequest, RunRequest, SelectRequest
 from fabn_pipeline import FabnPipelineParams
 
 
@@ -77,6 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     sel_p = sub.add_parser("select", help="Shorthand for intent=select")
     sel_p.add_argument("--json", required=True, help="SelectRequest JSON string")
 
+    exp_p = sub.add_parser("explain", help="Shorthand for intent=explain")
+    exp_p.add_argument("--json", required=True, help="ExplainRequest JSON string")
+
     chat_p = sub.add_parser("chat", help="Natural language via HF Inference API (Qwen)")
     chat_p.add_argument("--message", "-m", help="Single user message")
     chat_p.add_argument(
@@ -97,6 +101,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "select":
         turn = AgentTurn(
             intent="select", select=SelectRequest.model_validate_json(args.json)
+        )
+        return _run_turn(session, turn)
+    if args.command == "explain":
+        turn = AgentTurn(
+            intent="explain", explain=ExplainRequest.model_validate_json(args.json)
         )
         return _run_turn(session, turn)
 

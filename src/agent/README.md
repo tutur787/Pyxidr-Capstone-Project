@@ -24,14 +24,15 @@ User message (chat) or JSON (turn/run/select)
 
 | File | Role |
 |------|------|
-| **`schemas.py`** | Pydantic models: `RunRequest`, `SelectRequest`, `AgentTurn`. Contract between LLM, CLI, and orchestrator. |
-| **`validators.py`** | Fail-closed checks (e.g. no future `optimization_date`, positive `budget_usd`). Raises `ValidationError`. |
+| **`schemas.py`** | Pydantic models: `RunRequest`, `SelectRequest`, `ExplainRequest`, `AgentTurn`. Contract between LLM, CLI, and orchestrator. |
+| **`validators.py`** | Fail-closed checks (e.g. no future `optimization_date`, positive `budget_usd`, non-empty `question`). Raises `ValidationError`. |
 | **`mapper.py`** | Maps `RunRequest` fields onto `FabnPipelineParams` (`H`, `eps_D`, `RBC_bar`, `cost_of_capital`→`gamma_w`, `savings_rate_scalar`→`lambda_w`, `w_max`, `n_min`). |
 | **`catalog.py`** | Fixed **SELECT** queries: `summary_metrics`, `top_holdings_delta`, `recommended_trades`. No LLM-generated SQL/pandas. |
+| **`reference_docs.py`** | Loads [`duration-swaps-reference.md`](duration-swaps-reference.md) and [`optimization-reference.md`](optimization-reference.md) for the `explain` intent. |
 | **`orchestrator.py`** | `AgentSession`, `handle_turn()`, `translate_user_message()`, JSON response formatting. |
 | **`qwen_translator.py`** | Hugging Face Inference API client for `Qwen/Qwen2.5-7B-Instruct` (env: `HF_TOKEN`, optional `HF_AGENT_MODEL`). |
-| **`prompts.py`** | System prompt for NL → `AgentTurn` JSON. |
-| **`__init__.py`** | Exports `AgentTurn`, `RunRequest`, `SelectRequest` only (avoids pulling Gurobi/BQ on lightweight imports). |
+| **`prompts.py`** | System prompt for NL → `AgentTurn` JSON, plus the narrative and explain prompts. |
+| **`__init__.py`** | Exports `AgentTurn`, `RunRequest`, `SelectRequest`, `ExplainRequest` only (avoids pulling Gurobi/BQ on lightweight imports). |
 
 ## Intents (v1)
 
@@ -39,7 +40,18 @@ User message (chat) or JSON (turn/run/select)
 |--------|---------|----------------|
 | **`run`** | Configure optimization | `confirm=false` → parameter preview only; `confirm=true` → full pipeline + solve + CSV export |
 | **`select`** | Query last job | Read-only; requires a completed job in `AgentSession.last_job` |
+| **`explain`** | Conceptual Q&A about duration, swaps, or the optimization model | Read-only; grounded in the reference docs + `AgentSession.last_job`/`base_params` if available. No solver run. |
 | **`unsupported`** | Out of scope | No solver run |
+
+## EXPLAIN
+
+`ExplainRequest.question` is a free-text how/why question about duration hedging, the swap overlay,
+or the SAP optimization's objective/constraints. The orchestrator builds a `live_context` dict from
+the current session (`base_params`, plus `summary_metrics` if a job has run) and passes it — together
+with the full text of [`duration-swaps-reference.md`](duration-swaps-reference.md) and
+[`optimization-reference.md`](optimization-reference.md) — to Qwen for a grounded answer that
+preserves the docs' own **[CURRENT]**/**[PLANNED]** distinction (e.g. it will not claim the pay-fixed
+swap overlay is live). If no job has run yet, the answer is conceptual rather than numeric.
 
 ## SELECT queries
 
@@ -76,6 +88,7 @@ python src/agent_cli.py run --json '{"optimization_date":"2025-01-15","budget_us
 python src/agent_cli.py select --json '{"query_id":"summary_metrics"}'
 python src/agent_cli.py select --json '{"query_id":"top_holdings_delta","limit":10}'
 python src/agent_cli.py select --json '{"query_id":"recommended_trades","limit":20}'
+python src/agent_cli.py explain --json '{"question":"why is duration hedged with a swap instead of just picking shorter bonds?"}'
 ```
 
 Natural language (HF Inference API):

@@ -12,8 +12,13 @@ from typing import Any
 
 from agent.catalog import execute_select
 from agent.mapper import run_request_to_params
-from agent.schemas import AgentTurn, RunRequest, SelectRequest
-from agent.validators import ValidationError, validate_run_request, validate_select_request
+from agent.schemas import AgentTurn, ExplainRequest, RunRequest, SelectRequest
+from agent.validators import (
+    ValidationError,
+    validate_explain_request,
+    validate_run_request,
+    validate_select_request,
+)
 from fabn_job import FabnJobResult, run_fabn_job
 from fabn_pipeline import FabnPipelineParams
 
@@ -55,6 +60,10 @@ def handle_turn(turn: AgentTurn, *, session: AgentSession) -> AgentResponse:
         if turn.select is None:
             return AgentResponse(ok=False, message="intent=select requires a select payload")
         return _handle_select(turn.select, session=session)
+    if turn.intent == "explain":
+        if turn.explain is None:
+            return AgentResponse(ok=False, message="intent=explain requires an explain payload")
+        return _handle_explain(turn.explain, session=session)
     return AgentResponse(ok=False, message=f"unknown intent: {turn.intent}")
 
 
@@ -117,6 +126,43 @@ def _handle_select(req: SelectRequest, *, session: AgentSession) -> AgentRespons
             data["narrative_error"] = str(exc)
 
     return AgentResponse(ok=True, message=f"Query {req.query_id} complete.", data=data)
+
+
+def _handle_explain(req: ExplainRequest, *, session: AgentSession) -> AgentResponse:
+    try:
+        validate_explain_request(req)
+    except ValidationError as exc:
+        return AgentResponse(ok=False, message=str(exc))
+
+    p = session.base_params
+    live_context: dict[str, Any] = {
+        "session_params": {
+            "budget_usd": p.H,
+            "duration_band_years_eps_D": p.eps_D,
+            "rbc_target_RBC_bar": p.RBC_bar,
+            "cost_of_capital_gamma_w": p.gamma_w,
+            "savings_rate_scalar_lambda_w": p.lambda_w,
+            "w_max": p.w_max,
+            "n_min": p.n_min,
+            "FABN_coupon_r_FABN": p.FABN_COUPON,
+        }
+    }
+    if session.last_job is not None:
+        live_context["last_run_summary"] = execute_select(
+            SelectRequest(query_id="summary_metrics"), session.last_job
+        )
+    else:
+        live_context["last_run_summary"] = None
+        live_context["note"] = "no run has completed in this session yet"
+
+    try:
+        from agent.qwen_translator import answer_explain_question
+
+        answer = answer_explain_question(req.question, json.dumps(live_context, default=str))
+    except Exception as exc:  # noqa: BLE001 — surface as a failed response, not a crash
+        return AgentResponse(ok=False, message=f"explain failed: {exc}")
+
+    return AgentResponse(ok=True, message=answer, data={"live_context": live_context})
 
 
 def parse_turn_json(raw: str) -> AgentTurn:

@@ -7,8 +7,8 @@ from datetime import date
 
 import pytest
 
-from agent.schemas import AgentTurn, RunRequest, SelectRequest
-from agent.validators import ValidationError, validate_run_request
+from agent.schemas import AgentTurn, ExplainRequest, RunRequest, SelectRequest
+from agent.validators import ValidationError, validate_explain_request, validate_run_request
 
 
 def test_run_request_roundtrip_json() -> None:
@@ -50,3 +50,17 @@ def test_select_request_recommended_trades() -> None:
     req = SelectRequest(query_id="recommended_trades", limit=20)
     assert req.query_id == "recommended_trades"
     assert req.limit == 20
+
+
+def test_agent_turn_explain() -> None:
+    turn = AgentTurn(
+        intent="explain",
+        explain=ExplainRequest(question="why is duration hedged?"),
+    )
+    assert turn.explain is not None
+    assert turn.explain.question == "why is duration hedged?"
+
+
+def test_validate_explain_rejects_blank_question() -> None:
+    with pytest.raises(ValidationError):
+        validate_explain_request(ExplainRequest(question="   "))

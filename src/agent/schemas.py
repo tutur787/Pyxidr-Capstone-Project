@@ -47,10 +47,17 @@ class SelectRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
 
 
+class ExplainRequest(BaseModel):
+    """EXPLAIN — conceptual Q&A grounded in the duration/swaps and optimization reference docs."""
+
+    question: str
+
+
 class AgentTurn(BaseModel):
     """Single orchestration turn from user or LLM translator."""
 
-    intent: Literal["run", "select", "unsupported"]
+    intent: Literal["run", "select", "explain", "unsupported"]
     run: Optional[RunRequest] = None
     select: Optional[SelectRequest] = None
+    explain: Optional[ExplainRequest] = None
     user_message: str = ""
