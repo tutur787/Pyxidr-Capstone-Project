@@ -429,6 +429,7 @@ def _solve(
             "score_bps":    round(float(book_yield[i] * 1e4), 2),  # book yield in bps
             "mid_price":    round(float(price[i]), 4),              # per $100 face
             "reduced_cost": round(float(h[i].RC), 6),              # Gurobi reduced cost: SAP δ per $
+            "rbc_factor_pct": round(float(theta[i] * 100), 4),     # C-1 RBC factor, pct of face
         })
     alloc_list.sort(key=lambda x: x["h_opt"], reverse=True)
 

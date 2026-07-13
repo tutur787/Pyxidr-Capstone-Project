@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import portfolio, rates, news, markets, fabns, optimize, market_history
+from routers import portfolio, rates, news, markets, fabns, optimize, market_history, agent
 
 app = FastAPI(title="FABN Dashboard API", version="0.1.0")
 
@@ -18,6 +18,7 @@ app.include_router(markets.router)
 app.include_router(fabns.router)
 app.include_router(optimize.router)
 app.include_router(market_history.router)
+app.include_router(agent.router)
 
 
 @app.get("/health")

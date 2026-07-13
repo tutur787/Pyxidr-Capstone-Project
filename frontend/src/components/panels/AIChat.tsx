@@ -1,38 +1,87 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage } from '../../types'
 
-const STUB_REPLY = "I'm the FABN Portfolio AI assistant. Full integration is coming soon — I'll be able to answer questions about your portfolio composition, optimization constraints, risk exposure, and suggested trades. Stay tuned!"
-
 const WELCOME: ChatMessage = {
   role: 'assistant',
-  content: "Hello! I'm your FABN Portfolio AI. Ask me about your portfolio, risk metrics, or suggested trades. (Full AI integration coming soon.)",
+  content: "Hello! I'm your FABN Portfolio AI. Ask me about what's on screen right now — \"what are the recommended trades?\", \"what's driving RBC?\" — or ask me to run the optimizer with different parameters (e.g. \"run the optimization for 2025-01-15 with 20% cost of capital, confirm\").",
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+}
+
+function nowTs() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 export default function AIChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [hfConfigured, setHfConfigured] = useState<boolean | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  function handleSend() {
+  useEffect(() => {
+    fetch('/api/agent/status')
+      .then(res => res.json())
+      .then(data => setHfConfigured(!!data.hf_token_configured))
+      .catch(() => setHfConfigured(false))
+  }, [])
+
+  async function handleSend() {
     const text = input.trim()
     if (!text || loading) return
 
-    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    setMessages(prev => [...prev, { role: 'user', content: text, timestamp: ts }])
+    setMessages(prev => [...prev, { role: 'user', content: text, timestamp: nowTs() }])
     setInput('')
     setLoading(true)
 
-    setTimeout(() => {
-      const replyTs = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      setMessages(prev => [...prev, { role: 'assistant', content: STUB_REPLY, timestamp: replyTs }])
+    try {
+      const res = await fetch('/api/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      })
+      const payload = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: formatReply(payload), timestamp: nowTs() }])
+    } catch {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "Couldn't reach the backend — is it running?",
+        timestamp: nowTs(),
+      }])
+    } finally {
       setLoading(false)
-    }, 800)
+    }
+  }
+
+  function formatReply(payload: { ok: boolean; message: string; data?: Record<string, unknown> }): string {
+    const parts = [payload.message]
+    const data = payload.data
+    if (data?.query_id === 'recommended_trades' && Array.isArray(data.rows)) {
+      const rows = data.rows as Array<{ action: string; cusip: string; delta_usd: number; sap_score_bps: number }>
+      if (rows.length) {
+        parts.push(rows.slice(0, 8).map(r =>
+          `${r.action} ${r.cusip} — $${Math.abs(r.delta_usd).toLocaleString()} (${r.sap_score_bps} bps SAP)`
+        ).join('\n'))
+      }
+    } else if (data?.query_id === 'top_holdings_delta' && Array.isArray(data.rows)) {
+      const rows = data.rows as Array<{ bond: string; delta_usd: number }>
+      if (rows.length) {
+        parts.push(rows.slice(0, 8).map(r => `${r.bond}: Δ$${r.delta_usd.toLocaleString()}`).join('\n'))
+      }
+    } else if (data?.query_id === 'summary_metrics') {
+      const d = data as Record<string, number | string>
+      parts.push(
+        `SAP objective: $${Number(d.sap_objective_usd).toLocaleString()} | ` +
+        `Duration: ${d.duration_avg_years}y | Bonds: ${d.n_bonds_selected}`
+      )
+    } else if (data?.query_id === 'contribution_analysis') {
+      if (typeof data.narrative === 'string' && data.narrative) parts.push(data.narrative)
+      if (data.reconciliation_warning) parts.push(String(data.reconciliation_warning))
+    }
+    return parts.filter(Boolean).join('\n\n')
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -52,8 +101,14 @@ export default function AIChat() {
           <h2 className="text-text-primary font-semibold text-sm">AI Portfolio Assistant</h2>
           <p className="text-text-muted text-xs">Ask questions about your portfolio</p>
         </div>
-        <span className="ml-auto text-xs text-text-muted border border-border px-2 py-0.5 rounded-full">
-          Stub mode
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full border ${
+          hfConfigured === null
+            ? 'text-text-muted border-border'
+            : hfConfigured
+              ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+              : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+        }`}>
+          {hfConfigured === null ? 'Checking…' : hfConfigured ? 'Live' : 'HF_TOKEN not set'}
         </span>
       </div>
 

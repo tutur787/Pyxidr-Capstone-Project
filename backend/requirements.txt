@@ -11,3 +11,4 @@ vaderSentiment==3.3.2
 scipy>=1.13.0
 pandas-datareader>=0.10.0
 gurobipy>=11.0.0
+huggingface_hub>=0.24.0

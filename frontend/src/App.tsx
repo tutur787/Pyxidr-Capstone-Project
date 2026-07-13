@@ -82,6 +82,11 @@ export default function App() {
       const data: OptimizerResult = await res.json()
       if (data.status === 'optimal') {
         setOptimizerResult(data)
+        fetch('/api/agent/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }).catch(() => {})
         setHistory(prev => {
           const marketValue = data.allocations.reduce((s, a) => s + a.h_opt * a.mid_price / 100, 0)
           const entry: HistoryEntry = {
