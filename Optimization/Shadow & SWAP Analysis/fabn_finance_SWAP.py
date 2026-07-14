@@ -441,3 +441,78 @@ def swap_fair_value(fixed_rate, r_market, maturity_years, settlement_freq=2):
     cf[-1] += 1.0                                        # implicit notional
     pv_fixed = float((cf * (1.0 + r_market) ** (-t)).sum())
     return pv_fixed - 1.0                                # minus PV(floating leg) = par
+
+
+# ---------------------------------------------------------------------------
+# CVaR support (Phase 2 / Step 4) — scenario generation + mark-to-market pricing
+# ---------------------------------------------------------------------------
+# The tail risk the FABN book actually cares about is the book-value-vs-market-
+# value gap at a forced unwind (Robin: "the real risk is the book-vs-market gap
+# at maturity, not exact cash-flow dedication"). To bound it with a CVaR limit we
+# need (a) a set of rate+spread shock scenarios and (b) the market value of each
+# bond under each scenario. Both are pure functions so they can be unit-tested and
+# shared by the static optimizer and the backtest (single source of truth).
+
+def historical_shock_scenarios(rate_hist, spread_hist, horizon_days=21, max_scenarios=250):
+    """Joint (rate, spread) shock scenarios from historical levels.
+
+    Each overlapping ``horizon_days`` change in the representative risk-free rate
+    and OAS spread is one scenario, so the empirical rate/spread co-movement (and
+    fat tails) is preserved without any distributional assumption.
+
+    Parameters
+    ----------
+    rate_hist, spread_hist : array-like
+        Time series (decimal) of a representative risk-free rate and OAS spread.
+    horizon_days : int
+        Change horizon in observations (e.g. ~21 ≈ one trading month).
+    max_scenarios : int
+        Cap on the number of scenarios (evenly subsampled if exceeded).
+
+    Returns
+    -------
+    (np.ndarray, np.ndarray)
+        ``d_rate``, ``d_spread`` — equal-length shock arrays (decimal).
+    """
+    r = np.asarray(rate_hist, dtype=float)
+    s = np.asarray(spread_hist, dtype=float)
+    k = max(int(horizon_days), 1)
+    if len(r) <= k or len(s) <= k:
+        return np.zeros(0), np.zeros(0)
+    dr = r[k:] - r[:-k]
+    ds = s[k:] - s[:-k]
+    m = np.isfinite(dr) & np.isfinite(ds)
+    dr, ds = dr[m], ds[m]
+    if len(dr) > max_scenarios and len(dr) > 0:
+        idx = np.linspace(0, len(dr) - 1, max_scenarios).astype(int)
+        dr, ds = dr[idx], ds[idx]
+    return dr, ds
+
+
+def market_values_under_shocks(bond_cf, t_vec, base_yields, d_rate, d_spread):
+    """Market value per $1 face of each bond under each (rate, spread) shock.
+
+    ``MV[s, n] = sum_t cf[t, n] * (1 + y0_n + dr_s + ds_s) ** (-t)`` — each bond's
+    cashflows re-discounted at its base yield plus a parallel rate shock and a
+    uniform spread shock. Higher yields (rate/spread up) → lower MV, so
+    ``BV - MV`` is the forced-sale loss the CVaR limit will cap.
+
+    Parameters
+    ----------
+    bond_cf : (T, N) array — cashflows per $1 face, aligned to ``t_vec``.
+    t_vec   : (T,) array — times in years.
+    base_yields : (N,) array — current discount yield per bond (rf + spread).
+    d_rate, d_spread : (S,) arrays — per-scenario shocks (decimal).
+
+    Returns
+    -------
+    (S, N) np.ndarray — market value per $1 face.
+    """
+    cf = np.asarray(bond_cf, dtype=float)          # (T, N)
+    t = np.asarray(t_vec, dtype=float)             # (T,)
+    y0 = np.asarray(base_yields, dtype=float)      # (N,)
+    dy = np.asarray(d_rate, dtype=float) + np.asarray(d_spread, dtype=float)  # (S,)
+    yS = y0[None, :] + dy[:, None]                 # (S, N) shocked yield
+    yS = np.maximum(yS, -0.99)                     # guard against (1+y)<=0
+    disc = (1.0 + yS)[:, :, None] ** (-t[None, None, :])   # (S, N, T)
+    return np.einsum("tn,snt->sn", cf, disc)       # (S, N)
