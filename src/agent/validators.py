@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from agent.schemas import RunRequest, SelectRequest
+from agent.schemas import ExplainRequest, RunRequest, SelectRequest
 
 
 class ValidationError(Exception):
@@ -34,3 +34,8 @@ def validate_run_request(req: RunRequest, *, today: date | None = None) -> None:
 def validate_select_request(req: SelectRequest, *, has_last_job: bool) -> None:
     if not has_last_job:
         raise ValidationError("no completed job in session; run an optimization first")
+
+
+def validate_explain_request(req: ExplainRequest) -> None:
+    if not req.question.strip():
+        raise ValidationError("question must not be empty")
