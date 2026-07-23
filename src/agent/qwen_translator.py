@@ -12,7 +12,7 @@ import os
 import re
 from typing import Any, Optional
 
-from agent.prompts import CONTRIBUTION_NARRATIVE_PROMPT, SYSTEM_PROMPT
+from agent.prompts import CONTRIBUTION_NARRATIVE_PROMPT, EXPLAIN_SYSTEM_PROMPT, SYSTEM_PROMPT
 from agent.schemas import AgentTurn
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,27 @@ def generate_narrative(context_json: str) -> str:
     messages = [{"role": "user", "content": prompt}]
     logger.info("HF inference narrative model=%s", _model_id())
     response = client.chat_completion(messages=messages, max_tokens=256, temperature=0)
+    return _completion_content(response).strip()
+
+
+def answer_explain_question(question: str, live_context_json: str) -> str:
+    """Call Qwen to answer a conceptual duration/swaps/optimization question.
+
+    Grounded in the reference docs (src/agent/duration-swaps-reference.md and
+    optimization-reference.md) plus whatever live run context the caller supplies.
+    """
+    from huggingface_hub import InferenceClient
+    from agent.reference_docs import load_reference_docs
+
+    client = InferenceClient(model=_model_id(), token=_hf_token())
+    prompt = EXPLAIN_SYSTEM_PROMPT.format(
+        reference_docs=load_reference_docs(),
+        live_context_json=live_context_json,
+        question=question,
+    )
+    messages = [{"role": "user", "content": prompt}]
+    logger.info("HF inference explain model=%s", _model_id())
+    response = client.chat_completion(messages=messages, max_tokens=700, temperature=0)
     return _completion_content(response).strip()
 
 
