@@ -19,26 +19,22 @@ function fmtConstraintValue(c: ConstraintResult): string {
       return `$${(c.value / 1e6).toFixed(1)}M`
     case 'Solvency (RBC)':
       return `${c.value.toFixed(3)}x`
-    case 'Duration Gap':
-      return `${c.value.toFixed(3)} yrs`
-    case 'PV Shortfall':
-      return `$${(c.value / 1e3).toFixed(1)}k`
     default:
+      if (c.label.startsWith('CVaR')) return `$${(c.value / 1e6).toFixed(2)}M`
+      if (c.label.startsWith('Duration Gap')) return `${c.value.toFixed(3)} yrs`
       return String(c.value)
   }
 }
 
 function fmtConstraintBound(c: ConstraintResult): string {
+  if (c.bound === null) return 'informational'
   switch (c.label) {
     case 'Budget':
       return `= $${(c.bound / 1e6).toFixed(0)}M`
     case 'Solvency (RBC)':
       return `≥ ${c.bound.toFixed(1)}x`
-    case 'Duration Gap':
-      return `≤ ${c.bound.toFixed(2)} yrs`
-    case 'PV Shortfall':
-      return `≤ $${(c.bound / 1e3).toFixed(1)}k`
     default:
+      if (c.label.startsWith('CVaR')) return `≤ $${(c.bound / 1e6).toFixed(2)}M`
       return String(c.bound)
   }
 }

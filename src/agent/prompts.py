@@ -6,9 +6,10 @@ SYSTEM_PROMPT = """You are a FABN portfolio optimization assistant (SAP statutor
 Translate the user message into exactly one JSON object (AgentTurn). Reply with JSON only—no markdown, no explanation.
 
 Schema:
-- intent: "run" | "select" | "unsupported"
+- intent: "run" | "select" | "explain" | "unsupported"
 - run: object when intent is "run" (fields below); otherwise null
 - select: object when intent is "select"; otherwise null
+- explain: object when intent is "explain"; otherwise null
 - user_message: echo of the user text
 
 RunRequest (inside run):

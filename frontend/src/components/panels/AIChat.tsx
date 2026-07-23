@@ -3,7 +3,7 @@ import type { ChatMessage } from '../../types'
 
 const WELCOME: ChatMessage = {
   role: 'assistant',
-  content: "Hello! I'm your FABN Portfolio AI. Ask me about what's on screen right now — \"what are the recommended trades?\", \"what's driving RBC?\" — or ask me to run the optimizer with different parameters (e.g. \"run the optimization for 2025-01-15 with 20% cost of capital, confirm\").",
+  content: "Hello! I'm your FABN Portfolio AI. Ask me about what's on screen right now — \"what are the recommended trades?\", \"what's driving RBC?\" — ask a conceptual question like \"why does the pay-fixed swap hedge duration risk?\", or ask me to run the optimizer with different parameters (e.g. \"run the optimization for 2025-01-15 with 20% cost of capital, confirm\").",
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 }
 

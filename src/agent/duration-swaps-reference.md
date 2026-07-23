@@ -6,10 +6,12 @@
 > `Optimization/fabn_data_pipeline.py` (`D_FABN`), `backend/services/optimizer_service.py`
 > (how swaps enter the LP).
 >
-> **Two-state document.** **[CURRENT]** = code that runs today (receive-fixed overlay).
-> **[PLANNED]** = the pay-fixed / CVaR redesign discussed with the sponsor and prototyped in
-> `swap_intuition_lab/swap_intuition_lab.ipynb`. Read alongside
-> `docs/agent-context/optimization-reference.md`.
+> **Two-state document.** **[CURRENT]** = code that runs today (pay-fixed overlay, CVaR-governed
+> risk). **[RETIRED]** = mechanics that were live before the Step 1-4 redesign shipped and have
+> since been replaced (receive-fixed overlay, the PV-shortfall cap, the held-to-maturity bond
+> exclusion) — kept here for context on why the design changed, not as current behavior.
+> **[PLANNED]** = further redesign work (hedge-ratio rebalancing, credit budgets) not yet
+> implemented. Read alongside `docs/agent-context/optimization-reference.md`.
 
 ---
 
@@ -79,32 +81,32 @@ the rate term and leaves the spread term untouched. (Verified numerically in
 
 Swap math lives in `Optimization/fabn_finance.py:309-444`, all **per \$1 notional**.
 
-### 2.1 [CURRENT] Receive-fixed overlay
+### 2.1 [RETIRED] Receive-fixed overlay
 
-Today's overlay is **receive-fixed / pay-floating**: the book receives a known fixed coupon and
-pays SOFR-linked floating. It behaves like *adding a bond* — positive duration, value rises when
-rates fall.
+Before the Step 1-4 redesign, the overlay was **receive-fixed / pay-floating**: the book received
+a known fixed coupon and paid SOFR-linked floating. It behaved like *adding a bond* — positive
+duration, value rises when rates fall. This was retired in favor of the pay-fixed overlay in
+§2.2 once the bond universe opened up to post-FABN-maturity bonds (§1, HtM exclusion removed) —
+a book that can now hold longer bonds needs a hedge that *subtracts* duration, not adds it.
 
 | Function | Formula (per \$1) | Returns | Role |
 |---|---|---|---|
-| `swap_fixed_leg_duration(tenor, fixed_rate, r_disc)` `:319` | `D_mod` of a par bond with the same coupon/tenor | modified duration (years, **positive**) | The swap's duration contribution `swp_dur_k`. |
+| `swap_fixed_leg_duration(tenor, fixed_rate, r_disc)` `:319` | `D_mod` of a par bond with the same coupon/tenor | modified duration (years, **positive** as returned; negated by the caller for the pay-fixed overlay, see §2.2) | The swap's duration contribution `swp_dur_k`. |
 | `swap_quarterly_cashflows(fixed_rate, r_float, tenor, n_q)` `:354` | `(fixed_rate − r_float)·dt_settle` per settlement, mapped to quarters | net CF per \$1 per quarter | Feeds the facility recursion (`CF^{swap}_q`). |
 | `swap_fair_value(fixed_rate, r_market, tenor)` `:406` | `PV(fixed leg at r_market) − 1` | mark-to-market per \$1 | Risk reporting / IMR on unwind (not in the LP objective). |
 
-**How it maps to a duration adjustment (in the LP).** From `optimizer_service.py:213-227` and
-the duration band (`:279-286`):
+**[RETIRED] How the old receive-fixed overlay mapped to a duration adjustment:**
 ```
 swp_dur_k = swap_fixed_leg_duration(tenor_k, c_swap_k, r_float)          # positive
-net asset dollar-duration = Σ_i durs_i · h_i  +  Σ_k swp_dur_k · v_k     # swap ADDS duration
+net asset dollar-duration = Σ_i durs_i · h_i  +  Σ_k swp_dur_k · v_k     # swap ADDED duration
 ```
-with `K=3` tenors `[1,2,3]y`, `c_swap = [4.3, 4.4, 4.5]%`, `r_float = 4.35%`, capped at
-`Σ_k v_k ≤ 0.20·H`. **Sizing:** the LP chooses `v_k` so the net duration lands in the band; a
-receive-fixed swap is used to *top up* duration when the eligible (short, pre-FABN) bonds fall
-short of `D_FABN`.
+with differentiated fixed rates `c_swap = [4.3, 4.4, 4.5]%` (not at-the-money) — a receive-fixed
+swap was used to *top up* duration when the eligible (short, pre-FABN) bonds fell short of
+`D_FABN`. Superseded by §2.2.
 
-### 2.2 [PLANNED] Pay-fixed overlay (the redesign)
+### 2.2 [CURRENT] Pay-fixed overlay
 
-To hold **long, high-spread** bonds while staying duration-matched, the overlay flips to
+To hold **long, high-spread** bonds while staying duration-matched, the overlay is
 **pay-fixed / receive-floating**: pay a known fixed coupon, receive SOFR. This behaves like
 *shorting a bond* — **negative duration**, value rises when rates rise.
 
@@ -119,9 +121,18 @@ net asset duration = ( Σ_i durs_i · h_i  −  D_sw · Σ_k v_k ) / H     # swa
 - **Spread sensitivity = 0:** the swap references SOFR, not any issuer's credit, so it leaves
   credit-spread exposure fully intact. That is the entire point: shed the rate risk you are not
   paid for, keep the spread risk you are.
-- **Carry:** on an upward-sloping curve a pay-fixed swap has slightly *negative* carry
-  `(r_float − c_swap)·v`. So the swap does not add income; its value is **relaxing the duration
-  constraint** so the optimizer may hold longer, higher-spread bonds.
+- **Carry:** the live swap is priced **at-the-money** (`c_swap = r_float` for every tenor), so
+  carry `(c_swap − r_float)·v` is ~zero by construction — the swap does not add or remove income;
+  its value is purely the hedge, so the optimizer may hold longer, higher-spread (now including
+  post-FABN-maturity) bonds without the sale-price rate risk that used to require excluding them.
+
+**[CURRENT] Live parameters** (`optimizer_service.py:245-253`):
+```
+K = 3 tenors [1, 2, 3]y, all at-the-money: c_swap_k = r_float = 4.35%
+swp_dur_k = -swap_fixed_leg_duration(tenor_k, r_float, r_float)          # negated -> negative
+net asset dollar-duration = Σ_i durs_i · h_i  +  Σ_k swp_dur_k · v_k     # swap SUBTRACTS duration
+```
+capped at `Σ_k v_k ≤ 0.20·H` (`optimizer_service.py:354-358`, unchanged from the retired design).
 
 Full derivations, sign checks, and the `bond DV01 − swap DV01 = target` identity are in
 `swap_intuition_lab` §6 (with a verification cell).
@@ -150,9 +161,10 @@ The causal chain, unhedged:
 **How the swap overlay offsets it.** A swap moves with rates but not with the issuer's credit.
 Sizing the overlay so the **net** asset duration equals `D_FABN` makes `D_A · MV_A` track
 `D_FABN · MV_L`, so `ΔSurplus ≈ 0` for a parallel rate move — the rate risk is neutralized while
-the bonds' **spread** exposure (the paid-for risk) is untouched. In the [PLANNED] design a
-**pay-fixed** swap does this for a *long* book (subtracting the excess duration); in the
-[CURRENT] code a **receive-fixed** swap tops up a *short* book to reach the target.
+the bonds' **spread** exposure (the paid-for risk) is untouched. In the [CURRENT] design a
+**pay-fixed** swap does this for a *long, open-universe* book (subtracting the excess duration);
+the [RETIRED] receive-fixed overlay instead topped up a *short* book to reach the target, back
+when post-FABN-maturity bonds were banned outright rather than hedged.
 
 > Subtlety worth stating: matching net asset duration to `D_FABN` immunizes **surplus**, not the
 > asset market value alone. The assets still carry `D_FABN` worth of rate duration *by design*;
@@ -165,9 +177,9 @@ the bonds' **spread** exposure (the paid-for risk) is untouched. In the [PLANNED
 
 | Item | Formula | Plain English | Rationale | Notes |
 |---|---|---|---|---|
-| **Duration band** (`optimizer_service.py:279-286`) | `\|Σ_i durs_i h_i ± Σ_k swp_dur_k v_k − D_FABN·H\| ≤ eps_D·H` | Net asset duration within `eps_D` years of `D_FABN`. | Immunizes surplus against rate moves (§3). | `eps_D` default 0.3y (`run`) / 0.4y (lab). Tighter = truer hedge, less spread; too tight = infeasible. |
-| **Swap notional cap** (`:322-326`) | `Σ_k v_k ≤ v_max_frac·H` | Total swap notional ≤ 20% of book. | Bounds derivative leverage & counterparty/collateral exposure. | `v_max_frac = 0.20`. In [PLANNED] pay-fixed design this also bounds how far a long book can be duration-neutralized (see optimization-ref Example B). |
-| **[PLANNED] CVaR on MV/BV** | `ζ + 1/((1−α)S)·Σ_ω z_ω ≤ β`, `z_ω ≥ (1 − MV_ω/BV) − ζ`, `z_ω ≥ 0` | Cap the average mark-to-market loss in the worst `(1−α)` tail of rate+spread scenarios. | Directly bounds the forced-sale loss the old HtM ban prevented; a *coherent* risk measure, LP-representable (Rockafellar–Uryasev). | Confidence `α` (e.g. 0.95). Can replace the duration band (it penalizes rate moves itself) or run alongside. Details: `swap_intuition_lab` §11. |
+| **[RETIRED as hard bound] Duration band** (`optimizer_service.py:311-318`) | `\|Σ_i durs_i h_i ± Σ_k swp_dur_k v_k − D_FABN·H\| ≤ eps_D_eff·H` | Net asset duration within `eps_D_eff` years of `D_FABN`. | Was the primary risk control; now relaxed to an inert `eps_D_eff = 100yr` band whenever CVaR is active (always, currently) — the LP still reports the gap for information, it just never binds. | `eps_D` request param still accepted but has no effect while CVaR governs. |
+| **Swap notional cap** (`:354-358`) | `Σ_k v_k ≤ v_max_frac·H` | Total swap notional ≤ 20% of book. | Bounds derivative leverage & counterparty/collateral exposure. | `v_max_frac = 0.20`. In the [CURRENT] pay-fixed design this also bounds how far a long book can be duration-neutralized (see optimization-ref Example B). |
+| **[CURRENT] CVaR on MV/BV** (`:360-369`) | `ζ + 1/((1−α)S)·Σ_ω z_ω ≤ φ_cvar·H`, `z_ω ≥ loss_ω − ζ`, `z_ω ≥ 0` | Cap the average forced-sale loss in the worst `(1−α)` tail of rate+spread scenarios. | Directly bounds the forced-sale loss the retired HtM ban used to prevent by exclusion instead; a *coherent* risk measure, LP-representable (Rockafellar–Uryasev). Now the primary risk control, replacing the duration band and the retired PV-shortfall cap. | `α = 0.95` (cvar_alpha), `φ_cvar` request param (default 0.01). Scenarios (`cvar_relloss`, `cvar_d_rate`) come from `fabn_data_pipeline.py`'s historical shock-scenario section. |
 | **[PLANNED] Hedge-ratio target** | `v* = (Σ_i D_i(t)·MV_i(t) − D_tgt·MV_assets(t)) / D_sw(t)` | The swap notional that brings net dollar-duration to target *right now*. | The number you rebalance **to** as the book and time evolve. | Recomputed each period; reproduces the optimizer's `v` at t=0 (verified, lab §12). |
 | **[PLANNED] Rebalance trigger (no-trade band)** | rebalance when `\|net_dur(t) − D_tgt\| > δ` | Leave the swap alone until net duration drifts outside `D_tgt ± δ`, then reset to `v*`. | Trades off tracking error vs. transaction cost — avoids churning the swap every tick. | Same logic as the duration band, applied to *rebalancing*. Also rebalance on any material trade/maturity. |
 
@@ -190,7 +202,11 @@ swap, or (c) partial novation — but the model represents only the *net* notion
 
 ## 5. Worked examples
 
-### Example A — [CURRENT] receive-fixed swap topping up a short book
+### Example A — [RETIRED] receive-fixed swap topping up a short book
+
+This example describes the retired design, where post-FABN bonds were banned by a hard HtM
+exclusion (also retired — see optimization-reference.md) and the duration band was a hard bound.
+Kept for context on the problem the receive-fixed overlay used to solve.
 
 Eligible bonds (post-FABN bonds banned by HtM) average duration `D_A = 2.2`, but
 `D_FABN = 2.8` with `eps_D = 0.3` ⇒ band `[2.5, 3.1]`. The pure-bond book at 2.2y is **below**
@@ -200,9 +216,9 @@ the band — infeasible on bonds alone.
   `H` at 2.2y gives dollar-duration `2.2·H`; the target midpoint is `2.8·H`.
 - Needed swap notional: `swp_dur·v = (2.8 − 2.2)·H ⇒ v ≈ 0.6·H / 2.7 ≈ 0.22·H`.
 - But `v ≤ 0.20·H` (cap) ⇒ the swap can lift duration to `2.2 + 2.7·0.20 = 2.74`, just inside
-  the band. **The receive-fixed swap rescues feasibility** by adding the missing duration.
+  the band. **The receive-fixed swap rescued feasibility** by adding the missing duration.
 
-### Example B — [PLANNED] pay-fixed swap stripping duration off a long book
+### Example B — [CURRENT] pay-fixed swap stripping duration off a long book
 
 Hold a 10-year bond book, `D_A = 7.8`, target `D_FABN = 2.8`. Use a 5y **pay-fixed** swap,
 `D_sw ≈ 4.5` per \$1 (subtracts duration).
@@ -232,20 +248,22 @@ Full runnable versions (with the terminal-date dispersion and the reinvestment f
 ## 6. Frequently needed context (FAQ)
 
 **Q: Is the current overlay pay-fixed or receive-fixed?**
-**[CURRENT] receive-fixed** (`swap_fixed_leg_duration` returns a *positive* duration; it *adds*
-duration to top up a short book). The **[PLANNED]** redesign flips it to **pay-fixed** (negative
-duration) to strip duration off a long book. Always check the sign of `swp_dur` in the code you
+**[CURRENT] pay-fixed** — the code negates `swap_fixed_leg_duration`'s return value, so `swp_dur`
+is *negative* and the overlay *subtracts* duration to strip it off a long, open-universe book.
+The **[RETIRED]** receive-fixed overlay used a positive `swp_dur` to top up a short book, back
+when post-FABN bonds were banned outright. Always check the sign of `swp_dur` in the code you
 are reading.
 
 **Q: Does the swap hedge credit-spread risk?**
 No. A swap references SOFR/rates, not issuer credit — its spread DV01 is zero. It hedges *rate*
 risk only. Spread-widening risk is the compensated exposure the strategy deliberately keeps; it
-is controlled by the credit budgets and (planned) the CVaR constraint, not by the swap.
+is controlled by the CVaR constraint (§4), not by the swap.
 
 **Q: How is swap notional `v` sized?**
-By the duration band inside the LP (`v` is a decision variable, not a fixed ratio). It is set so
-net asset duration lands in `D_FABN ± eps_D`, subject to `Σ v_k ≤ v_max_frac·H`. The closed-form
-"what notional hits the target *now*" is the hedge ratio `v*` in §4.
+By the CVaR risk budget inside the LP (`v` is a decision variable, not a fixed ratio) — it's sized
+so the worst-tail forced-sale loss stays under `φ_cvar·H`, subject to `Σ v_k ≤ v_max_frac·H`. The
+duration band is still computed and reported but no longer binds (§4). The closed-form
+"what notional hits a duration target *now*" is the [PLANNED] hedge-ratio `v*` in §4.
 
 **Q: What discount yield goes into duration?**
 Per bond, `risk-free + spread` (with a Bloomberg fallback where the analytic solve fails,
@@ -282,8 +300,11 @@ the `IMRLedger` (`fabn_finance.py:232`), consistent with statutory accounting.
   `swap_fair_value` `:406`; IMR: `IMRLedger` `:232`.
 - `Optimization/fabn_data_pipeline.py` — `D_FABN` `:323-324`, `r_FABN` `:58`, `qtr_fabn_cf`
   `:332-333`.
-- `backend/services/optimizer_service.py` — swap params `:213-227`, duration band `:279-286`,
-  swap in facility recursion `:293-303`, swap notional cap `:322-326`.
+- `backend/services/optimizer_service.py` — swap params `:245-253`, duration band `:311-318`
+  (relaxed to inert while CVaR is active), swap in facility recursion `:325-335`, swap notional
+  cap `:354-358`, CVaR tail-loss block `:360-369`.
+- `Optimization/fabn_optimizer_sap.py` — the literal notebook-mirror version of the same LP, kept
+  in sync section-by-section with `FABN_Optimizer_SAP_Shadow_SWAP.ipynb`.
 - `docs/agent-context/optimization-reference.md` — the full objective/constraint set and how the
   swap terms sit inside the LP.
 - `swap_intuition_lab/swap_intuition_lab.ipynb` — runnable, verified derivations: the

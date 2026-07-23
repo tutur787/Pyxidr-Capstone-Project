@@ -30,8 +30,13 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
 from agent.contribution_analysis import analyze_contributions, to_agent_context  # noqa: E402
-from agent.schemas import AgentTurn, RunRequest, SelectRequest  # noqa: E402
-from agent.validators import ValidationError, validate_run_request, validate_select_request  # noqa: E402
+from agent.schemas import AgentTurn, ExplainRequest, RunRequest, SelectRequest  # noqa: E402
+from agent.validators import (  # noqa: E402
+    ValidationError,
+    validate_explain_request,
+    validate_run_request,
+    validate_select_request,
+)
 
 from services import optimizer_service  # noqa: E402
 
@@ -39,6 +44,7 @@ __all__ = [
     "AgentSession",
     "AgentResponse",
     "AgentTurn",
+    "ExplainRequest",
     "RunRequest",
     "SelectRequest",
     "ValidationError",
@@ -246,11 +252,30 @@ def _handle_select(req: SelectRequest, *, session: AgentSession) -> AgentRespons
     return AgentResponse(ok=True, message=f"Query {req.query_id} complete.", data=data)
 
 
+def _handle_explain(req: ExplainRequest, *, session: AgentSession) -> AgentResponse:
+    try:
+        validate_explain_request(req)
+    except ValidationError as exc:
+        return AgentResponse(ok=False, message=str(exc))
+
+    live_context = _summary_metrics(session.last_result) if session.last_result is not None else None
+
+    from agent.qwen_translator import answer_explain_question
+
+    try:
+        answer = answer_explain_question(req.question, json.dumps(live_context))
+    except Exception as exc:  # noqa: BLE001 — surface translator/LLM errors to the chat UI
+        return AgentResponse(ok=False, message=f"Couldn't answer that: {exc}")
+
+    return AgentResponse(ok=True, message=answer, data={"query_id": "explain", "question": req.question})
+
+
 def handle_turn(turn: AgentTurn, *, session: AgentSession) -> AgentResponse:
     if turn.intent == "unsupported":
         return AgentResponse(
             ok=False,
-            message="I can only help with running the optimizer or querying the last run's results.",
+            message="I can only help with running the optimizer, querying the last run's results, or "
+                    "explaining how the model works.",
         )
     if turn.intent == "run":
         if turn.run is None:
@@ -260,6 +285,10 @@ def handle_turn(turn: AgentTurn, *, session: AgentSession) -> AgentResponse:
         if turn.select is None:
             return AgentResponse(ok=False, message="intent=select requires a select payload")
         return _handle_select(turn.select, session=session)
+    if turn.intent == "explain":
+        if turn.explain is None:
+            return AgentResponse(ok=False, message="intent=explain requires an explain payload")
+        return _handle_explain(turn.explain, session=session)
     return AgentResponse(ok=False, message=f"unknown intent: {turn.intent}")
 
 

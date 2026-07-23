@@ -2,13 +2,19 @@
 Optimizer service — wraps Optimization/fabn_data_pipeline.py + SAP Gurobi solve.
 
 Usage:
-    result = run(date, gamma_w, lambda_w, eps_D, w_max, n_min)
+    result = run(date, gamma_w, lambda_w, eps_D, w_max, n_min, phi_cvar=phi_cvar)
 
     gamma_w  = cost_of_capital (insurer WACC, e.g. 0.15 = 15%)
-    lambda_w = lending-facility reinvestment rate scalar (r_save = r_FABN × lambda_w)
-    eps_D    = duration gap tolerance (years)
+    lambda_w = lending-facility reinvestment rate scalar (r_save = r_FABN × lambda_w).
+               NOTE: r_FABN's base is 0.0 (facility surplus earns nothing, matching
+               the notebook's Step 3 "no free parking"), so lambda_w is currently a
+               functional no-op — kept wired for forward compatibility.
+    eps_D    = duration gap tolerance (years). Relaxed to an inert 100yr band
+               whenever the CVaR risk constraint is active (always, currently).
     w_max    = max single-bond weight fraction
     n_min    = min distinct bonds (enforced via effective_delta)
+    phi_cvar = CVaR risk budget: worst-5% tail forced-sale loss <= phi_cvar * H.
+               Primary risk control (replaces the old PV-shortfall cap).
 
 The pipeline is cached per date (max 5 entries, LRU eviction).
 Each call to `run` is expected to come from asyncio.to_thread so it never
@@ -131,15 +137,16 @@ def _get_pipeline(date: str) -> dict:
 def run(
     date:     str,
     gamma_w:  float = 0.15,   # cost_of_capital (WACC), matches pipeline calibration
-    lambda_w: float = 1.0,    # lending-facility rate scalar
-    eps_D:    float = 0.3,    # duration gap tolerance (years)
+    lambda_w: float = 1.0,    # lending-facility rate scalar (currently a no-op, see module docstring)
+    eps_D:    float = 0.3,    # duration gap tolerance (years) — relaxed while CVaR governs
     w_max:    float = 0.05,
     n_min:    int   = 20,
     vol_percentile: float = risk_service.DEFAULT_PERCENTILE,  # trading-signal threshold percentile
+    phi_cvar: float = 0.01,   # CVaR risk budget: worst-5% tail loss <= phi_cvar * H
 ) -> dict:
     """Run the FABN SAP optimizer for a given date and hyperparameters."""
     try:
-        return _solve(date, gamma_w, lambda_w, eps_D, w_max, n_min, vol_percentile)
+        return _solve(date, gamma_w, lambda_w, eps_D, w_max, n_min, vol_percentile, phi_cvar)
     except Exception as exc:
         logger.exception("Optimizer failed for date=%s", date)
         return {"status": "error", "date": date, "error": str(exc)}
@@ -152,11 +159,12 @@ def run(
 def _solve(
     date:     str,
     gamma_w:  float,   # cost_of_capital / WACC
-    lambda_w: float,   # r_save = r_FABN * lambda_w
+    lambda_w: float,   # r_save = r_FABN * lambda_w (r_FABN base is 0.0, see module docstring)
     eps_D:    float,
     w_max:    float,
     n_min:    int,
     vol_percentile: float = risk_service.DEFAULT_PERCENTILE,
+    phi_cvar: float = 0.01,
 ) -> dict:
     import gurobipy as gp
     from gurobipy import GRB
@@ -191,6 +199,9 @@ def _solve(
     D_FABN      = pipeline["D_FABN"]
     RBC_bar     = pipeline["RBC_bar"]
     fixed_df    = pipeline["fixed"].set_index("CUSIP")
+    cvar_relloss = pipeline["cvar_relloss"]  # (S,N) per-$ forced-sale loss coeffs (Step 4)
+    cvar_d_rate  = pipeline["cvar_d_rate"]   # (S,) per-scenario rate shock (swap MV)
+    cvar_alpha   = pipeline["cvar_alpha"]    # CVaR tail level (worst 5%)
 
     # Truncate the quarterly grid to the FABN's own maturity horizon. Without this,
     # Q spans however far the bond universe's cashflows run (driven by long-maturity
@@ -210,8 +221,10 @@ def _solve(
     cost_of_capital = gamma_w
     lambda_cap      = cost_of_capital * RBC_bar
 
-    # Lending-facility reinvestment rate
-    r_save = r_FABN * lambda_w
+    # Lending-facility reinvestment rate. Base r_FABN is forced to 0.0 (Step 3:
+    # "no free parking" — facility surplus earns nothing), so r_save is always 0.0
+    # regardless of lambda_w; lambda_w is kept as a wired-but-inert parameter.
+    r_save = 0.0 * lambda_w
 
     # effective_delta: tighter per-issuer cap forces at least n_min bonds
     effective_delta = min(w_max, 1.0 / max(n_min, 1))
@@ -219,20 +232,23 @@ def _solve(
     # Bid-ask half-spread ×10 (same scaling convention as SAP notebook)
     tau = tau_raw * 10
 
-    eta    = 1.0    # liquidity penalty weight
-    phi_sf = 0.01   # PV shortfall hard cap (1% of PV liability)
+    eta    = 1.0    # (reporting only — liq penalty removed from objective, no hard PV cap)
+    phi_sf = 1      # DEPRECATED: PV-shortfall cap removed; CVaR governs risk
     dt_q   = 0.25   # quarter length in years
+
+    # CVaR tail-loss control: replaces the duration band as primary risk control
+    use_cvar = True
 
     # Net NII rate: book_yield - r_FABN
     nii_rate = book_yield - r_FABN
 
     # ── 1C. Swap universe parameters ──────────────────────────────────────
     K          = 3
-    swap_tenor = np.array([1.0, 2.0, 3.0])                          # years
-    c_swap     = np.array([0.043, 0.044, 0.045])                     # receive-fixed rates
-    r_float    = float(pipeline.get("r_float", 0.0435))              # 3M Treasury / SOFR proxy
-    swp_dur    = np.array([ff.swap_fixed_leg_duration(swap_tenor[k], c_swap[k], r_float)
-                           for k in range(K)])
+    swap_tenor = np.array([1.0, 2.0, 3.0])                          # pay-fixed tenors (years)
+    r_float    = 0.0435                                              # SOFR proxy: ~3M Treasury
+    c_swap     = np.full(K, r_float)                                 # at-the-money: pure hedge, zero carry/CF
+    swp_dur    = -np.array([ff.swap_fixed_leg_duration(swap_tenor[k], c_swap[k], r_float)
+                            for k in range(K)])                      # pay-fixed: negative duration
     mu_swap    = 0.002                                               # C3 RBC factor per $1 notional
     v_max_frac = 0.20                                                # max 20% of H in swaps
 
@@ -265,14 +281,12 @@ def _solve(
     t_quarters = [dt_q * (q + 1) for q in range(Q)]
     df_q       = [(1.0 + r_FABN) ** (-t) for t in t_quarters]
 
-    # 2C. Hold-to-maturity exclusion: bonds maturing after FABN cannot fund it
+    # 2C. Step 2 open universe: post-FABN-maturity bonds admissible (was HTM
+    # exclusion) — the pay-fixed swap hedges their sale-price rate risk instead.
     _maturity = pd.to_datetime(
         pipeline["fixed"].set_index("CUSIP").loc[CUSIPS, "maturity"]
     ).values.astype("datetime64[ns]")
     post_fabn_mask = _maturity > np.datetime64(_FABN_MATURITY)
-    for i in range(N):
-        if post_fabn_mask[i]:
-            h[i].ub = 0.0
 
     # 2D. SAP Objective
     NII            = gp.quicksum(nii_rate[i] * h[i]              for i in range(N))
@@ -284,22 +298,24 @@ def _solve(
 
     swap_NII  = gp.quicksum((c_swap[k] - r_float) * v[k] for k in range(K))
     swap_RBC  = lambda_cap * mu_swap * gp.quicksum(v[k] for k in range(K))
-    SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income + swap_NII - swap_RBC
+    SAP = NII - capital_cost - turnover_cost + savings_income + swap_NII - swap_RBC  # liq_penalty removed — CVaR governs risk
     model.setObjective(SAP, GRB.MAXIMIZE)
 
     # 2E. Constraints
     # Budget
     model.addConstr(gp.quicksum(h[i] for i in range(N)) == H, name="budget")
 
-    # Duration alignment band (bonds + swaps jointly)
+    # Duration alignment band (bonds + swaps jointly). Relaxed to an inert 100yr
+    # band while CVaR governs risk (matches the notebook's eps_D_eff pattern).
     model.addConstr(
         gp.quicksum(durs[i] * h[i] for i in range(N))
         + gp.quicksum(swp_dur[k] * v[k] for k in range(K))
         - D_FABN * H == d_pos - d_neg,
         name="dur_gap_decomp",
     )
-    model.addConstr(d_pos <= eps_D * H, name="dur_upper")
-    model.addConstr(d_neg <= eps_D * H, name="dur_lower")
+    eps_D_eff = 100.0 if use_cvar else eps_D
+    model.addConstr(d_pos <= eps_D_eff * H, name="dur_upper")
+    model.addConstr(d_neg <= eps_D_eff * H, name="dur_lower")
 
     # Turnover decomposition
     for i in range(N):
@@ -318,12 +334,8 @@ def _solve(
                 name=f"facility_{q}",
             )
 
-    # PV shortfall hard cap
+    # PV-shortfall hard cap REMOVED — CVaR governs risk; facility retained as buffer.
     PV_liability = float(sum(float(qtr_fabn_cf[q]) * df_q[q] for q in range(Q)))
-    model.addConstr(
-        gp.quicksum(df_q[q] * s_net[q] for q in range(Q)) <= phi_sf * PV_liability,
-        name="pv_shortfall_limit",
-    )
 
     # Issuer concentration cap
     issuer_groups: dict[str, list[int]] = {}
@@ -340,6 +352,20 @@ def _solve(
         gp.quicksum(v[k] for k in range(K)) <= v_max_frac * H,
         name="swap_cap",
     )
+
+    # CVaR tail-loss limit — governs rate/spread risk; replaces the duration band
+    # and PV-shortfall cap. Rockafellar-Uryasev linearization over historical
+    # rate/spread shock scenarios generated in the pipeline.
+    if use_cvar:
+        S_scen    = cvar_relloss.shape[0]
+        cvar_zeta = model.addVar(lb=-GRB.INFINITY, name="cvar_zeta")
+        cvar_z    = model.addVars(S_scen, lb=0.0, name="cvar_z")
+        for s in range(S_scen):
+            loss_s = gp.quicksum(float(cvar_relloss[s, i]) * h[i] for i in range(N))
+            loss_s = loss_s + gp.quicksum(float(swp_dur[k]) * float(cvar_d_rate[s]) * v[k] for k in range(K))
+            model.addConstr(cvar_z[s] >= loss_s - cvar_zeta, name=f"cvar_excess_{s}")
+        cvar_expr = cvar_zeta + (1.0 / ((1.0 - cvar_alpha) * S_scen)) * gp.quicksum(cvar_z[s] for s in range(S_scen))
+        model.addConstr(cvar_expr <= phi_cvar * H, name="cvar_limit")
 
     # ── 2F. Solve ──────────────────────────────────────────────────────────
     model.optimize()
@@ -377,8 +403,14 @@ def _solve(
     selected_mask     = h_opt > 1.0
     wtd_book_yield    = float(sum(book_yield[i] * h_opt[i] for i in range(N))) / H
     wtd_spread        = float(sum(spread[i] * h_opt[i] for i in range(N))) / H
-    pv_shortfall_val  = float(sum(s_net_vals[q] * df_q[q] for q in range(Q)))
-    pv_sf_cap         = phi_sf * PV_liability
+    pv_shortfall_val  = float(sum(s_net_vals[q] * df_q[q] for q in range(Q)))  # diagnostic only, no cap
+
+    # Honest realized CVaR tail loss (not the LP's zeta artifact)
+    cvar_S     = cvar_relloss.shape[0]
+    cvar_ntail = int(np.ceil((1.0 - cvar_alpha) * cvar_S))
+    cvar_loss  = cvar_relloss @ h_opt
+    cvar_loss  = cvar_loss + (np.asarray(cvar_d_rate)[:, None] * (np.asarray(swp_dur) * v_opt)[None, :]).sum(axis=1)
+    cvar_realized = float(np.sort(cvar_loss)[-cvar_ntail:].mean())
 
     # Constraints
     constraints = [
@@ -389,19 +421,19 @@ def _solve(
             "pass":  bool(abs(h_opt.sum() - H) < 1.0),
         },
         {
-            "label": "Duration Gap",
+            "label": f"CVaR worst-{1 - cvar_alpha:.0%} tail loss",
+            "value": round(cvar_realized, 2),
+            "bound": round(phi_cvar * H, 2),
+            "pass":  bool(cvar_realized <= phi_cvar * H + 1.0),
+        },
+        {
+            "label": "Duration Gap (relaxed — CVaR governs)",
             "value": round(float(abs(D_avg - D_FABN)), 4),
-            "bound": round(float(eps_D), 4),
-            "pass":  bool(abs(D_avg - D_FABN) <= eps_D),
+            "bound": None,
+            "pass":  True,
         },
         {
-            "label": "PV Shortfall",
-            "value": round(float(pv_shortfall_val), 2),
-            "bound": round(float(pv_sf_cap), 2),
-            "pass":  bool(pv_shortfall_val <= pv_sf_cap),
-        },
-        {
-            "label": f"HtM Excluded ({int(post_fabn_mask.sum())} bonds)",
+            "label": f"HtM bonds no longer excluded ({int(post_fabn_mask.sum())} eligible)",
             "value": int(post_fabn_mask.sum()),
             "bound": N,
             "pass":  True,
@@ -498,7 +530,7 @@ def _solve(
 
     dur_upper_pi = _safe_pi("dur_upper") or 0.0
     dur_lower_pi = _safe_pi("dur_lower") or 0.0
-    pv_sf_pi     = _safe_pi("pv_shortfall_limit") or 0.0
+    cvar_pi      = _safe_pi("cvar_limit") or 0.0
     budget_pi    = _safe_pi("budget")
 
     shadow_prices = [
@@ -508,18 +540,18 @@ def _solve(
             "unit":  "$/$ ",
         },
         {
-            "label": "Duration gap — upper (per 0.1yr wider band)",
+            "label": "Duration gap — upper (relaxed, CVaR governs)",
             "dual":  round(dur_upper_pi * H * 0.1, 2),
             "unit":  "$",
         },
         {
-            "label": "Duration gap — lower (per 0.1yr wider band)",
+            "label": "Duration gap — lower (relaxed, CVaR governs)",
             "dual":  round(dur_lower_pi * H * 0.1, 2),
             "unit":  "$",
         },
         {
-            "label": "PV Shortfall cap (per $1M relaxed)",
-            "dual":  round(pv_sf_pi * 1e6, 2),
+            "label": "CVaR tail-loss cap (per $1M relaxed)",
+            "dual":  round(cvar_pi * 1e6, 2),
             "unit":  "$",
         },
         {

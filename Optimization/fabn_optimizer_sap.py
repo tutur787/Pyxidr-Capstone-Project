@@ -2,17 +2,22 @@
 
 Reformulates the FABN bond allocation around the SAP objective:
 
-    max  Σ(y_i - r_FABN)·h_i  -  λ_cap·Σ(θ_i·h_i)  -  η·PV(shortfall)
+    max  Σ(y_i - r_FABN)·h_i  -  λ_cap·Σ(θ_i·h_i)
          - Σ τ_i·(tc⁺_i + tc⁻_i)  +  r_save·dt_q·Σ B[q]
          + swap NII - swap capital cost
 
 where y_i = book yield (coupon + amortization), λ_cap = cost_of_capital × RBC_bar.
+Risk is governed by a CVaR tail-loss limit (Rockafellar-Uryasev linearization over
+historical rate/spread shock scenarios) rather than a PV-shortfall cap or a tight
+duration band; the swap overlay is pay-fixed (subtracts duration, hedges the
+now-open post-FABN-maturity bond universe) rather than receive-fixed.
 
 Mirrors FABN_Optimizer_SAP_Shadow_SWAP.ipynb (Shadow & SWAP Analysis) exactly,
-including the swap overlay, the FABN-maturity quarterly-grid truncation, and the
-shadow-price / reservation-price analysis (Sections 3B, 3B-ii, 3B-iii, 3C). One
-deliberate deviation: RBC_bar is 3.0 here (not the notebook's 1.5) — a business
-decision already made for this codebase; everything else matches.
+including the swap overlay, the FABN-maturity quarterly-grid truncation, the CVaR
+risk constraint, and the shadow-price / reservation-price analysis (Sections 3B,
+3B-ii, 3B-iii, 3C). One deliberate deviation: RBC_bar is 3.0 here (not the
+notebook's 1.5) — a business decision already made for this codebase; everything
+else matches.
 
 Usage (standalone)::
 
@@ -107,6 +112,9 @@ r_FABN      = pipeline["r_FABN"]       # FABN funding rate (annual)
 D_FABN      = pipeline["D_FABN"]       # liability modified duration (yrs)
 RBC_bar     = pipeline["RBC_bar"]      # required-capital multiplier on RBC
 eps_D       = pipeline["eps_D"]        # duration band tolerance (yrs)
+cvar_relloss = pipeline["cvar_relloss"]  # (S,N) per-$ forced-sale loss coeffs (Step 4)
+cvar_d_rate  = pipeline["cvar_d_rate"]   # (S,) per-scenario rate shock (swap MV)
+cvar_alpha   = pipeline["cvar_alpha"]    # CVaR tail level (worst 5%)
 
 # print(f"Pipeline loaded: N={N}, Q={Q_full} -> {Q} (truncated to {qtr_idx[-1]})  |  date {optimization_date.date()}")
 # print(f"Book yield mean {book_yield.mean()*100:.2f}%  |  tau mean {tau.mean()*1e4:.1f} bps")
@@ -117,12 +125,16 @@ eps_D       = pipeline["eps_D"]        # duration band tolerance (yrs)
 cost_of_capital = 0.15              # insurer WACC on required capital (annual)
 lambda_cap      = cost_of_capital * RBC_bar
 
-eta             = 1.0               # weight on PV(lending-facility shortfall)
+eta             = 1.0               # (reporting only since Step 1: liq penalty removed from objective; hard PV cap still binds)
 
-r_save          = r_FABN            # rate earned on facility surplus (reinvestment)
-r_borrow        = 0.05              # rate on drawn shortfall (informational only)
-phi_sf          = 0.01              # PV shortfall hard cap, fraction of PV(FABN)
+r_save          = 0.0               # Step 3 (no free parking): facility surplus earns 0 -- kills phantom savings income (matches backtest)
+r_borrow        = 0.05              # rate paid on any drawn shortfall (informational; eta drives the penalty)
+phi_sf          = 1                 # DEPRECATED (Step 4): PV-shortfall cap removed; CVaR governs risk
 dt_q            = 0.25              # quarter length in years
+
+# CVaR tail-loss control (Step 4): replaces the duration band as primary risk control
+use_cvar        = True              # True: CVaR on book-vs-market forced-sale loss governs risk; band relaxed to inert
+phi_cvar        = 0.01              # CVaR limit: worst-(1-alpha) tail loss <= phi_cvar * H
 
 delta           = 0.05              # max 5% of budget per issuer
 
@@ -138,16 +150,16 @@ nii_rate = (book_yield - r_FABN) if income_basis == "net" else book_yield.copy()
 # Section 1C — Swap Universe Parameters
 # =============================================================================
 use_swaps        = True
-swap_maturities  = [1.0, 2.0, 3.0]           # receive-fixed swap tenors (years)
-swap_rates_k     = [0.043, 0.044, 0.045]     # fixed rates at inception (annual, decimal)
-r_float          = float(pipeline.get("r_float", 0.0435))  # 3M Treasury / SOFR proxy
+swap_maturities  = [1.0, 2.0, 3.0]           # pay-fixed swap tenors (years)
+r_float          = 0.0435                     # SOFR proxy: ~3M Treasury on optimization_date
+swap_rates_k     = [r_float] * len(swap_maturities)  # at-the-money (Step 1): pure hedge, zero carry/CF
 mu_swap          = 0.002                      # C-3 RBC capital charge on swap notional
 swap_cap_pct     = 0.20                       # max total swap notional as % of H
 K                = len(swap_maturities) if use_swaps else 0
 
 if use_swaps and K > 0:
-    D_swap  = np.array([ff.swap_fixed_leg_duration(m, c, r_float, settlement_freq=2)
-                        for m, c in zip(swap_maturities, swap_rates_k)])
+    D_swap  = -np.array([ff.swap_fixed_leg_duration(m, c, r_float, settlement_freq=2)
+                         for m, c in zip(swap_maturities, swap_rates_k)])   # pay-fixed (Step 1): negative duration
     cf_swap = np.array([ff.swap_quarterly_cashflows(c, r_float, m, Q, settlement_freq=2)
                         for m, c in zip(swap_maturities, swap_rates_k)])   # shape (K, Q)
     # print(f"Swap overlay: K={K} tenors  |  cap={swap_cap_pct:.0%}xH = ${swap_cap_pct*H:,.0f}")
@@ -185,18 +197,17 @@ if use_swaps and K > 0:
 t_quarters = [dt_q * (q + 1) for q in range(Q)]
 df_q       = [(1.0 + r_FABN) ** (-t) for t in t_quarters]
 
-# Hold-to-maturity exclusion: bonds maturing after FABN cannot fund it
+# Step 2 open universe: post-FABN-maturity bonds admissible (was HTM exclusion).
+# A bond whose maturity falls AFTER the FABN cannot be relied on to fund it.
 _maturity = pd.to_datetime(
     pipeline["fixed"].set_index("CUSIP").loc[CUSIPS, "maturity"]
 ).values.astype("datetime64[ns]")
 post_fabn_mask = _maturity > np.datetime64(FABN_MATURITY)
-for i in range(N):
-    if post_fabn_mask[i]:
-        h[i].ub = 0.0
-# print(f"Hold-to-maturity: {int(post_fabn_mask.sum())}/{N} bonds excluded "
-      # f"(maturity > {FABN_MATURITY.date()})")
+# Step 2: post-FABN bonds are NOT excluded — the pay-fixed swap hedges their sale-price rate risk.
+# print(f"Step 2 open universe: {int(post_fabn_mask.sum())}/{N} post-FABN-maturity bonds "
+      # f"now admissible (maturity > {FABN_MATURITY.date()})")
 
-# 2C. Objective: Statutory NII - lambda*RBC - eta*Liquidity - tau*Turnover + savings + swaps
+# 2C. Objective: Statutory NII - lambda*RBC - tau*Turnover + savings + swaps
 NII            = gp.quicksum(nii_rate[i] * h[i]              for i in range(N))
 RBC            = gp.quicksum(theta[i]    * h[i]              for i in range(N))
 capital_cost   = lambda_cap * RBC
@@ -211,7 +222,7 @@ else:
     swap_nii = 0.0
     swap_cap_cost = 0.0
 
-SAP = NII - capital_cost - turnover_cost - liq_penalty + savings_income + swap_nii - swap_cap_cost
+SAP = NII - capital_cost - turnover_cost + savings_income + swap_nii - swap_cap_cost  # Step 4: CF-matching (penalty + hard cap) removed; CVaR governs risk
 model.setObjective(SAP, GRB.MAXIMIZE)
 
 # 2D. Constraints
@@ -223,8 +234,10 @@ _dur_bonds = gp.quicksum(durs[i] * h[i] for i in range(N))
 _dur_swaps = gp.quicksum(float(D_swap[k]) * v[k] for k in range(K)) if (use_swaps and K > 0) else 0.0
 model.addConstr(_dur_bonds + _dur_swaps - D_FABN * H == d_pos - d_neg,
                 name="dur_gap_decomp")
-model.addConstr(d_pos <= eps_D * H, name="dur_upper")
-model.addConstr(d_neg <= eps_D * H, name="dur_lower")
+# Under CVaR (Step 4) the band is relaxed to inert (eps_D_eff huge) so CVaR governs risk
+eps_D_eff = 100.0 if use_cvar else eps_D
+model.addConstr(d_pos <= eps_D_eff * H, name="dur_upper")
+model.addConstr(d_neg <= eps_D_eff * H, name="dur_lower")
 
 # Turnover decomposition
 for i in range(N):
@@ -241,13 +254,9 @@ for q in range(Q):
         model.addConstr(B[q] - s_net[q] == (1.0 + r_save * dt_q) * B[q - 1] + CF_A_q + CF_sw_q - CF_L_q,
                         name=f"facility_{q}")
 
-# PV shortfall hard cap
+# Step 4: PV-shortfall hard cap REMOVED -- CVaR governs risk; facility retained as buffer.
 PV_liability = float(sum(float(qtr_fabn_cf[q]) * df_q[q] for q in range(Q)))
-model.addConstr(
-    gp.quicksum(df_q[q] * s_net[q] for q in range(Q)) <= phi_sf * PV_liability,
-    name="pv_shortfall_limit",
-)
-# print(f"PV(FABN liability) = ${PV_liability:,.2f}   shortfall cap = ${phi_sf*PV_liability:,.2f}")
+# print(f"PV(FABN liability) = ${PV_liability:,.2f}   (no shortfall cap -- CVaR governs)")
 
 # Swap notional cap
 if use_swaps and K > 0:
@@ -260,6 +269,21 @@ for idx, cusip in enumerate(CUSIPS):
     issuer_groups.setdefault(cusip[:6], []).append(idx)
 for issuer, bidx in issuer_groups.items():
     model.addConstr(gp.quicksum(h[i] for i in bidx) <= delta * H, name=f"conc_{issuer}")
+
+# -- CVaR tail-loss limit (Step 4) -- governs rate/spread risk; replaces the band --
+if use_cvar:
+    S_scen    = cvar_relloss.shape[0]
+    cvar_zeta = model.addVar(lb=-GRB.INFINITY, name="cvar_zeta")          # VaR level
+    cvar_z    = model.addVars(S_scen, lb=0.0, name="cvar_z")              # tail excess
+    for s in range(S_scen):
+        loss_s = gp.quicksum(float(cvar_relloss[s, i]) * h[i] for i in range(N))
+        if use_swaps and K > 0:                                           # swap offsets rate loss
+            loss_s = loss_s + gp.quicksum(float(D_swap[k]) * float(cvar_d_rate[s]) * v[k] for k in range(K))
+        model.addConstr(cvar_z[s] >= loss_s - cvar_zeta, name=f"cvar_excess_{s}")
+    cvar_expr = cvar_zeta + (1.0 / ((1.0 - cvar_alpha) * S_scen)) * gp.quicksum(cvar_z[s] for s in range(S_scen))
+    model.addConstr(cvar_expr <= phi_cvar * H, name="cvar_limit")
+    # print(f"CVaR limit: worst-{1-cvar_alpha:.0%} tail forced-sale loss <= {phi_cvar:.1%} of H "
+          # f"(${phi_cvar*H:,.0f}); {S_scen} scenarios")
 
 # 2E. Solve
 model.optimize()
@@ -306,12 +330,13 @@ if model.Status == GRB.OPTIMAL:
     # print(f"      - amortization       : ${amort_val:>14,.2f}")
     # print(f"  (2) Savings income       : ${savings_val:>14,.2f}")
     # print(f"  (3) Capital cost lambda*RBC: ${capital_cost_val:>12,.2f}")
-    # print(f"  (4) Liquidity penalty     : ${liq_val:>13,.2f}")
-    # print(f"  (5) Turnover cost         : ${turnover_val:>13,.2f}")
+    # print(f"  (4) Turnover cost         : ${turnover_val:>13,.2f}")
     if use_swaps and K > 0 and v_opt.sum() > 1.0:
         pass
-        # print(f"  (6) Swap NII              : ${swap_nii_val:>13,.2f}")
-        # print(f"  (7) Swap capital cost     : ${swap_cap_val:>13,.2f}")
+        # print(f"  (5) Swap NII              : ${swap_nii_val:>13,.2f}")
+        # print(f"  (6) Swap capital cost     : ${swap_cap_val:>13,.2f}")
+    # print("-" * 60)
+    # print(f"  [diag] PV shortfall used  : ${liq_val:>13,.2f}   (no cap -- CVaR governs; not in objective)")
     # print("=" * 60)
     # print(f"  RBC (Sum f_i h_i)        : ${RBC_val:,.2f}   required capital ${req_cap:,.2f}")
     # print(f"  Statutory earnings / req. capital : {earn_per_cap:.4f}")
@@ -327,14 +352,25 @@ if model.Status == GRB.OPTIMAL:
     # Constraint status
     pv_short = float(sum(df_q[q] * s_net_vals[q] for q in range(Q)))
     _dur_chk = abs(D_eff - D_FABN) if (use_swaps and K > 0) else abs(D_avg - D_FABN)
+    _rows = [("Budget (Sum h = H)", h_opt.sum(), H, abs(h_opt.sum()-H) < 1.0)]
+    if use_cvar:
+        _S = cvar_relloss.shape[0]
+        _ntail = int(np.ceil((1.0 - cvar_alpha) * _S))              # worst-5% scenario count
+        _loss  = cvar_relloss @ h_opt                               # per-scenario portfolio loss ($)
+        if use_swaps and K > 0 and v_opt.sum() > 0:                 # swap offsets rate loss
+            _loss = _loss + (np.asarray(cvar_d_rate)[:, None]
+                             * (np.asarray(D_swap) * v_opt)[None, :]).sum(axis=1)
+        cvar_val = float(np.sort(_loss)[-_ntail:].mean())           # HONEST realized tail loss (not zeta-artifact)
+        _rows.append((f"CVaR worst-{1-cvar_alpha:.0%} tail loss (<= phi_cvar*H)",
+                      cvar_val, phi_cvar*H, cvar_val <= phi_cvar*H + 1.0))
+        _rows.append(("Duration band (relaxed -- CVaR governs)", _dur_chk, float("nan"), True))
+    else:
+        _rows.append(("Duration (|D_eff-D_FABN|<=eps_D)", _dur_chk, eps_D, _dur_chk <= eps_D + 1e-6))
     constraints_df = pd.DataFrame({
-        "Constraint": ["Budget (Sum h = H)", "Duration (|D_eff-D_FABN|<=eps_D)",
-                       "PV shortfall (<= phi_sf*PV_liab)"],
-        "Value":  [h_opt.sum(), _dur_chk, pv_short],
-        "Bound":  [H, eps_D, phi_sf * PV_liability],
-        "Pass":   ["PASS" if abs(h_opt.sum()-H) < 1.0 else "FAIL",
-                   "PASS" if _dur_chk <= eps_D + 1e-6 else "FAIL",
-                   "PASS" if pv_short <= phi_sf*PV_liability + 1.0 else "FAIL"],
+        "Constraint": [r[0] for r in _rows],
+        "Value":  [r[1] for r in _rows],
+        "Bound":  [r[2] for r in _rows],
+        "Pass":   ["PASS" if r[3] else "FAIL" for r in _rows],
     })
     # print(constraints_df.to_string())
 
@@ -387,7 +423,6 @@ else:
     pi_budget    = model.getConstrByName("budget").Pi
     pi_dur_upper = model.getConstrByName("dur_upper").Pi
     pi_dur_lower = model.getConstrByName("dur_lower").Pi
-    pi_shortfall = model.getConstrByName("pv_shortfall_limit").Pi
     pi_facility  = np.array([model.getConstrByName(f"facility_{q}").Pi for q in range(Q)])
     pi_issuer    = {iss: model.getConstrByName(f"conc_{iss}").Pi for iss in issuer_groups}
 
@@ -395,7 +430,9 @@ else:
     rc = np.array([h[i].RC for i in range(N)])
 
     # 2b. Marginal $ with NO issuer/diversification caps — relax ONLY the issuer
-    #     concentration caps; keep the duration band and PV-shortfall cap.
+    #     concentration caps. KEEP the CVaR limit (duration band relaxed;
+    #     PV-shortfall cap removed), so the risk-relief value that makes the
+    #     budget dollar worth pi_budget is preserved — only diversification is freed.
     _m2 = model.copy()
     _m2.Params.OutputFlag = 0
     for _iss in issuer_groups:
@@ -427,7 +464,7 @@ else:
                               f"${pi_unconstr - pi_budget:+,.4f}/$1; freed $ -> {CUSIPS[best_i]} [{_best_status}]"),
         },
         {
-            "Constraint"   : f"Duration upper  (<= {eps_D} yr x H)",
+            "Constraint"   : ("Duration upper  (relaxed -- CVaR governs)" if use_cvar else f"Duration upper  (<= {eps_D} yr x H)"),
             "Shadow price" : f"${pi_dur_upper:+,.4f} / yr-$",
             "Binding?"     : _yn(pi_dur_upper),
             "Reading"      : (
@@ -437,23 +474,13 @@ else:
             ),
         },
         {
-            "Constraint"   : f"Duration lower  (<= {eps_D} yr x H)",
+            "Constraint"   : ("Duration lower  (relaxed -- CVaR governs)" if use_cvar else f"Duration lower  (<= {eps_D} yr x H)"),
             "Shadow price" : f"${pi_dur_lower:+,.4f} / yr-$",
             "Binding?"     : _yn(pi_dur_lower),
             "Reading"      : (
                 f"Binding -- widen band by 0.1 yr -> +${abs(pi_dur_lower)*0.1*H:,.0f} NII"
                 if abs(pi_dur_lower) > 1e-6 else
                 "Not binding -- portfolio fits naturally within lower limit"
-            ),
-        },
-        {
-            "Constraint"   : f"PV shortfall cap  (<= {phi_sf:.1%} PV_L)",
-            "Shadow price" : f"${pi_shortfall:+,.4f} / $1",
-            "Binding?"     : _yn(pi_shortfall),
-            "Reading"      : (
-                f"Binding -- $1M more tolerance -> +${abs(pi_shortfall)*1e6:,.0f} NII"
-                if abs(pi_shortfall) > 1e-6 else
-                "Not binding -- facility surplus comfortable"
             ),
         },
     ])
@@ -707,7 +734,7 @@ if model.Status != GRB.OPTIMAL:
     pass
     # print("3B-iii requires an optimal base solution -- skipping.")
 else:
-    _terms = ["NII", "Savings", "Capital", "Turnover", "Liquidity", "SwapNII", "SwapCap"]
+    _terms = ["NII", "Savings", "Capital", "Turnover", "SwapNII", "SwapCap"]
 
     def _resolve_budget(H_new, drop_caps=False):
         m = model.copy(); m.Params.OutputFlag = 0
@@ -850,7 +877,7 @@ else:
     axes[1].set_title("Fig 12 -- Cost of issuer/diversification caps vs budget\n"
                       "(value held back per marginal dollar)")
     axes[1].grid(alpha=0.25)
-    _xlo, _xhi = 470.0, 550.0
+    _xlo, _xhi = 500.0, 700.0
     _win = (H_grid / 1e6 >= _xlo) & (H_grid / 1e6 <= _xhi)
     _fmt = FuncFormatter(lambda v, _: f"${v:.4f}")
     for _ax, _yd in ((axes[0], np.concatenate([pi_con[_win], pi_unc[_win]])),
@@ -971,11 +998,11 @@ if model.Status == GRB.OPTIMAL:
         "Component": [
             "Statutory NII", "  - coupon income", "  - amortization",
             "Savings income", "Capital cost (lambda*RBC)",
-            "Liquidity penalty", "Turnover cost", "SAP OBJECTIVE",
+            "Turnover cost", "SAP OBJECTIVE",
         ],
         "Value ($)": [
             nii_val, coupon_val, amort_val, savings_val,
-            -capital_cost_val, -liq_val, -turnover_val, sap_val,
+            -capital_cost_val, -turnover_val, sap_val,
         ],
     })
     # print(sap_summary.to_string())
@@ -1028,8 +1055,8 @@ if model.Status == GRB.OPTIMAL:
 
     # 4D. Charts (saved to disk; no GUI required)
     fig, ax = plt.subplots(figsize=(8, 4))
-    comp = [nii_val, savings_val, -capital_cost_val, -liq_val, -turnover_val]
-    lab  = ["Statutory NII", "Savings", "Capital cost", "Liquidity", "Turnover"]
+    comp = [nii_val, savings_val, -capital_cost_val, -turnover_val]
+    lab  = ["Statutory NII", "Savings", "Capital cost", "Turnover"]
     ax.bar(lab, comp, color=["#2ecc71" if v >= 0 else "#e74c3c" for v in comp], edgecolor="white")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_title("SAP Objective Decomposition")
@@ -1083,9 +1110,7 @@ if model.Status == GRB.OPTIMAL:
         m.Params.LogToConsole = 0
         m.Params.OutputFlag   = 0
         h2 = m.addVars(N, lb=0.0)
-        for i in range(N):
-            if post_fabn_mask[i]:
-                h2[i].ub = 0.0
+        # Step 2: post-FABN-maturity bonds admissible (no h2[i].ub=0 exclusion)
         dp  = m.addVar(lb=0.0)
         dn  = m.addVar(lb=0.0)
         tp  = m.addVars(N, lb=0.0)
@@ -1095,9 +1120,8 @@ if model.Status == GRB.OPTIMAL:
         nii = gp.quicksum(nii_rate[i] * h2[i] for i in range(N))
         rbc = gp.quicksum(theta[i]    * h2[i] for i in range(N))
         txn = gp.quicksum(tau[i] * (tp[i] + tm[i]) for i in range(N))
-        liq = eta_ * gp.quicksum(df_q[q] * sn[q] for q in range(Q))
         sav = r_save * dt_q * gp.quicksum(B2[q] for q in range(Q - 1))
-        m.setObjective(nii - lam * rbc - txn - liq + sav, GRB.MAXIMIZE)
+        m.setObjective(nii - lam * rbc - txn + sav, GRB.MAXIMIZE)  # Step 1: no liq penalty (matches main model)
         m.addConstr(gp.quicksum(h2[i] for i in range(N)) == H)
         m.addConstr(gp.quicksum(durs[i] * h2[i] for i in range(N)) - D_FABN * H == dp - dn)
         m.addConstr(dp <= eps_D_ * H)
@@ -1113,7 +1137,6 @@ if model.Status == GRB.OPTIMAL:
                 m.addConstr(B2[q] - sn[q] == cfa - cfl)
             else:
                 m.addConstr(B2[q] - sn[q] == (1.0 + r_save * dt_q) * B2[q - 1] + cfa - cfl)
-        m.addConstr(gp.quicksum(df_q[q] * sn[q] for q in range(Q)) <= phi_sf * PV_liability)
         m.optimize()
         return m.ObjVal if m.Status == GRB.OPTIMAL else float("nan")
 
@@ -1135,8 +1158,102 @@ if model.Status == GRB.OPTIMAL:
     # plt.savefig("sap_sensitivity.png", dpi=100)
     plt.close()
 
+    # =========================================================================
+    # CVaR CALIBRATION SWEEP
+    # Re-solve on a COPY over a grid of phi_cvar; record how the portfolio
+    # responds. Non-destructive: the headline `model` solution is untouched.
+    # =========================================================================
+    if not use_cvar:
+        pass
+        # print("use_cvar = False -- sweep skipped.")
+    else:
+        _ms = model.copy(); _ms.Params.OutputFlag = 0
+        _cl = _ms.getConstrByName("cvar_limit")
+        _S  = cvar_relloss.shape[0]
+        _nt = int(np.ceil((1.0 - cvar_alpha) * _S))          # worst-5% count
+        _hs = use_swaps and K > 0
+        _Dsw = np.asarray(D_swap) if _hs else np.zeros(0)
+        _dr  = np.asarray(cvar_d_rate)
+
+        def _cvar_real(h_o, v_o):
+            loss = cvar_relloss @ h_o
+            if _hs and v_o.sum() > 0:
+                loss = loss + (_dr[:, None] * (_Dsw * v_o)[None, :]).sum(axis=1)
+            return float(np.sort(loss)[-_nt:].mean())
+
+        # Fine grid: all the action lives between the INFEAS floor (~0.35% of H) and
+        # the free optimum (~1.32% of H). Two loose points retained to show the plateau.
+        phis = [round(p, 5) for p in (np.arange(50, 136, 5) / 10000.0)] + [0.015, 0.020]
+        rec = []
+        for p in phis:
+            _cl.RHS = p * H
+            _ms.optimize()
+            if _ms.Status != GRB.OPTIMAL:
+                rec.append(dict(phi=p, feasible=False, SAP=np.nan, NII=np.nan,
+                                D_eff=np.nan, notional=np.nan, cvar_real=np.nan,
+                                cvar_pi=np.nan, iss_bind=np.nan))
+                continue
+            h_o = np.array([_ms.getVarByName(f"h[{i}]").X for i in range(N)])
+            v_o = np.array([_ms.getVarByName(f"v[{k}]").X for k in range(K)]) if _hs else np.zeros(0)
+            d_eff = (float((durs * h_o).sum()) + (float((_Dsw * v_o).sum()) if _hs else 0.0)) / H
+            rec.append(dict(
+                phi=p, feasible=True, SAP=_ms.ObjVal,
+                NII=float(sum(nii_rate[i] * h_o[i] for i in range(N))),
+                D_eff=d_eff, notional=float(v_o.sum()) if _hs else 0.0,
+                cvar_real=_cvar_real(h_o, v_o), cvar_pi=_cl.Pi,
+                iss_bind=sum(1 for iss in issuer_groups
+                             if abs(_ms.getConstrByName(f"conc_{iss}").Pi) > 1e-6)))
+        sweep_df = pd.DataFrame(rec).sort_values("phi").reset_index(drop=True)
+        sweep_df["CVaR governs?"] = np.where(sweep_df["cvar_pi"].abs() > 1e-6, "YES", "no")
+
+        disp = pd.DataFrame({
+            "phi_cvar"        : sweep_df.phi.map(lambda x: f"{x*100:.2f}%"),
+            "budget $M"       : (sweep_df.phi * H / 1e6).round(1),
+            "feas"            : np.where(sweep_df.feasible, "ok", "INFEAS"),
+            "SAP $M"          : (sweep_df.SAP / 1e6).round(3),
+            "NII $M"          : (sweep_df.NII / 1e6).round(3),
+            "D_eff"           : sweep_df.D_eff.round(3),
+            "Swap $M"         : (sweep_df.notional / 1e6).round(1),
+            "CVaR real $M"    : (sweep_df.cvar_real / 1e6).round(2),
+            "CVaR governs?"   : sweep_df["CVaR governs?"],
+            "issuer caps bind": sweep_df.iss_bind,
+        })
+        # print("=" * 78)
+        # print("  CVaR CALIBRATION SWEEP  (phi_cvar low = strict risk budget -> high = loose)")
+        # print("=" * 78)
+        # print(disp.to_string(index=False))
+        _first = sweep_df.loc[sweep_df["CVaR governs?"] == "YES", "phi"]
+        if len(_first):
+            pass
+            # print(f"\n  -> CVaR starts GOVERNING at phi_cvar <= {_first.max()*100:.2f}%  "
+                  # f"(${_first.max()*H/1e6:.1f}M budget). Above that it is slack.")
+        else:
+            pass
+            # print("\n  -> CVaR never binds on this grid; some other constraint governs throughout.")
+
+        _f = sweep_df[sweep_df.feasible]
+        x  = _f.phi * 100
+        fig, ax = plt.subplots(2, 2, figsize=(13, 9))
+        ax[0, 0].plot(x, _f.NII / 1e6, "o-", color="#2563eb")
+        ax[0, 0].set_title("(#3)  NII vs phi_cvar"); ax[0, 0].set_ylabel("NII ($M)")
+        ax[0, 1].plot(x, _f.D_eff, "o-", color="#059669")
+        ax[0, 1].axhline(D_FABN, ls="--", c="grey", label=f"D_FABN = {D_FABN:.2f}")
+        ax[0, 1].set_title("(#4)  Effective duration vs phi_cvar"); ax[0, 1].set_ylabel("D_eff (yr)")
+        ax[0, 1].legend(fontsize=8)
+        ax[1, 0].plot(x, _f.notional / 1e6, "o-", color="#d97706")
+        ax[1, 0].set_title("(#5)  Swap notional vs phi_cvar"); ax[1, 0].set_ylabel("Notional ($M)")
+        ax[1, 0].set_xlabel("phi_cvar (%)")
+        ax[1, 1].plot(x, _f.cvar_real / 1e6, "o-", color="#dc2626")
+        ax[1, 1].plot(x, (_f.phi * H) / 1e6, "k--", lw=1.0, label="phi_cvar budget")
+        ax[1, 1].set_title("(#6)  Realized tail loss vs phi_cvar budget"); ax[1, 1].set_ylabel("$M")
+        ax[1, 1].set_xlabel("phi_cvar (%)"); ax[1, 1].legend(fontsize=8)
+        plt.tight_layout()
+        # plt.savefig("cvar_calibration_sweep.png", dpi=100)
+        plt.close()
+
     # print("Charts saved: fig5_facility_shadow_prices.png, fig6_7_reduced_cost.png, "
           # "fig8_shadow_augmented_score.png, fig910_reservation_price.png, "
           # "fig11_12_marginal_dollar.png, fig13_marginal_dollar_breakdown.png, "
           # "fig_swap_overlay.png, sap_decomposition.png, sap_book_yield_vs_alloc.png, "
-          # "sap_nii_decomp.png, sap_sector_alloc.png, sap_sensitivity.png")
+          # "sap_nii_decomp.png, sap_sector_alloc.png, sap_sensitivity.png, "
+          # "cvar_calibration_sweep.png")

@@ -46,11 +46,12 @@ export const stubNews: NewsItem[] = [
 
 export const defaultHyperParams: HyperParams = {
   gamma_w:        0.15,   // matches pipeline calibration
-  lambda_w:       1.0,    // r_lend = r_FABN * 1.0 (no scaling)
-  eps_D:          0.3,    // matches pipeline calibration
+  lambda_w:       1.0,    // currently a no-op — facility reinvestment base rate is 0.0
+  eps_D:          0.3,    // relaxed to an inert 100yr band while CVaR governs (always, currently)
   w_max:          0.05,
   n_min:          20,
   vol_percentile: 75,     // trading-signal trigger: top-quartile of trailing-year vol
+  phi_cvar:       0.01,   // CVaR risk budget: worst-5% tail loss <= phi_cvar * H
 }
 
 export const KNOWN_FABNS: Fabn[] = [

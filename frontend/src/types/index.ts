@@ -37,11 +37,12 @@ export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-track
 
 export interface HyperParams {
   gamma_w:        number
-  lambda_w:       number
-  eps_D:          number
+  lambda_w:       number  // currently a no-op — facility reinvestment base rate is 0.0
+  eps_D:          number  // relaxed to an inert 100yr band while CVaR governs (always, currently)
   w_max:          number
   n_min:          number
   vol_percentile: number  // trading-signal threshold: worth_trading when 21d vol > this percentile of its trailing-year distribution
+  phi_cvar:       number  // CVaR risk budget: worst-5% tail forced-sale loss <= phi_cvar × H
 }
 
 export interface Fabn {
@@ -107,7 +108,7 @@ export interface HistoryEntry {
 export interface ConstraintResult {
   label: string
   value: number
-  bound: number
+  bound: number | null  // null = informational row, no hard bound (e.g. relaxed duration band)
   pass:  boolean
 }
 

@@ -60,9 +60,10 @@ export default function DerivativeUsage({ onClose, result, loading }: Props) {
 
         <div className="p-4 bg-surface-2 rounded-2xl border border-border">
           <p className="text-text-muted text-sm leading-relaxed">
-            The optimizer's only modeled derivative overlay is a book of <span className="text-text-secondary font-medium">1/2/3-year receive-fixed interest rate swaps</span>,
-            jointly optimized with the bond portfolio inside the same SAP objective — swaps can close the duration gap
-            at a fraction of the bid-ask cost of trading bonds. <span className="text-text-secondary font-medium">Credit default swaps and Treasury futures are not
+            The optimizer's only modeled derivative overlay is a book of <span className="text-text-secondary font-medium">1/2/3-year pay-fixed, at-the-money interest rate swaps</span>,
+            jointly optimized with the bond portfolio inside the same SAP objective. Pay-fixed swaps subtract duration —
+            they hedge the sale-price rate risk of the now-open, post-FABN-maturity bond universe rather than closing a
+            duration gap, and at-the-money rates mean close to zero carry by design. <span className="text-text-secondary font-medium">Credit default swaps and Treasury futures are not
             currently modeled</span> (no cost, RBC, or cashflow data source exists for them yet) — they aren't shown here
             with placeholder numbers.
           </p>
@@ -88,7 +89,7 @@ export default function DerivativeUsage({ onClose, result, loading }: Props) {
                 label="Duration Contribution"
                 value={`${totalDurContrib.toFixed(4)} yr`}
                 valueColor="text-blue-400"
-                sublabel="added to portfolio duration"
+                sublabel={totalDurContrib < 0 ? 'subtracted from portfolio duration (pay-fixed)' : 'added to portfolio duration'}
               />
               <KpiCard
                 label="Swap C3 Capital Cost"
@@ -177,36 +178,35 @@ export default function DerivativeUsage({ onClose, result, loading }: Props) {
         <div>
           <h3 className="text-text-primary font-medium text-sm mb-1">Hedge Effectiveness</h3>
           <p className="text-text-muted text-xs mb-3">
-            The optimizer's duration constraint applies to bonds <span className="font-mono">+</span> swaps jointly — the
-            "Duration Gap" KPI shown in Risk only reflects the bond book. This compares both against the liability target.
+            The duration band is currently relaxed to an inert 100yr tolerance — CVaR governs risk instead — so these
+            figures are informational, not pass/fail against a hard bound. The "Duration Gap" KPI shown in Risk only
+            reflects the bond book; this compares both bond-only and combined (bonds + swaps) duration against the
+            liability target.
           </p>
           {!isOptimal ? (
             <EmptyState label={loading ? 'Running optimizer…' : 'Run optimizer to see hedge effectiveness'} />
           ) : (
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className={`p-3.5 rounded-2xl border ${
-                bondOnlyGap !== null && bondOnlyGap <= 0.3 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'
-              }`}>
+              <div className="p-3.5 rounded-2xl border bg-surface-2/60 border-border">
                 <p className="text-text-muted mb-1">Bond-Only Duration Gap</p>
-                <p className={`font-mono font-bold text-base ${bondOnlyGap !== null && bondOnlyGap <= 0.3 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className="font-mono font-bold text-base text-text-secondary">
                   {bondOnlyDuration?.toFixed(3)} yr <span className="text-text-muted font-normal">vs target {durationTarget?.toFixed(3)}</span>
                 </p>
-                <p className="text-text-muted mt-0.5">gap {bondOnlyGap?.toFixed(3)} yr · bound ≤ 0.30 yr</p>
+                <p className="text-text-muted mt-0.5">gap {bondOnlyGap?.toFixed(3)} yr · informational</p>
               </div>
-              <div className={`p-3.5 rounded-2xl border ${
-                combinedGap !== null && combinedGap <= 0.3 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'
-              }`}>
+              <div className="p-3.5 rounded-2xl border bg-surface-2/60 border-border">
                 <p className="text-text-muted mb-1">Combined (Bonds + Swaps)</p>
-                <p className={`font-mono font-bold text-base ${combinedGap !== null && combinedGap <= 0.3 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className="font-mono font-bold text-base text-text-secondary">
                   {combinedDuration?.toFixed(3)} yr <span className="text-text-muted font-normal">vs target {durationTarget?.toFixed(3)}</span>
                 </p>
-                <p className="text-text-muted mt-0.5">gap {combinedGap?.toFixed(3)} yr · bound ≤ 0.30 yr</p>
+                <p className="text-text-muted mt-0.5">gap {combinedGap?.toFixed(3)} yr · informational</p>
               </div>
             </div>
           )}
-          {isOptimal && bondOnlyGap !== null && combinedGap !== null && bondOnlyGap > 0.3 && combinedGap <= 0.3 && (
-            <p className="text-emerald-400 text-xs mt-2">
-              ✓ The swap overlay is doing real work — bonds alone miss the duration band, but bonds + swaps satisfy it.
+          {isOptimal && totalDurContrib < -1e-6 && (
+            <p className="text-blue-400 text-xs mt-2">
+              The pay-fixed overlay is subtracting {Math.abs(totalDurContrib).toFixed(4)} yr of duration — hedging the
+              open bond universe's sale-price rate risk rather than closing a duration gap.
             </p>
           )}
         </div>

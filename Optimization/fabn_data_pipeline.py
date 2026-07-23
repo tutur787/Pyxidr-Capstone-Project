@@ -459,6 +459,64 @@ n_mid = int((~np.isnan(mid_raw)).sum())
       # f"(mean {np.nanmean(tau)*1e4:.1f} bps)")
 
 # =============================================================================
+# CVaR SCENARIOS (Step 4) -- historical rate+spread shocks + per-bond loss coeffs
+# =============================================================================
+# Tail risk = the book-value-vs-market-value gap at a forced unwind. Build the
+# loss distribution from HISTORICAL joint moves of a benchmark Treasury rate
+# (DGS5) and the IG corporate OAS (BAMLC0A0CM) -- real data, no distributional
+# assumption -- then reprice every bond's cashflows under each shock.
+# relloss[s,i] = 1 - MV_i(shock_s)/BV_i is the per-$ forced-sale loss (linear in
+# the holdings) that feeds a Rockafellar-Uryasev CVaR limit in the optimizer.
+CVAR_HORIZON_DAYS = 21     # ~1 trading month change horizon
+CVAR_MAX_SCEN     = 250
+CVAR_ALPHA        = 0.95   # tail level (worst 5%)
+
+
+def _fetch_shock_history(n_retries=3):
+    """~2yr history of 5yr UST (DGS5) and IG corp OAS (BAMLC0A0CM) from FRED."""
+    for attempt in range(1, n_retries + 1):
+        try:
+            raw = web.DataReader(["DGS5", "BAMLC0A0CM"], "fred",
+                                 start=optimization_date - pd.Timedelta(days=760),
+                                 end=optimization_date).dropna(how="any")
+            if len(raw) < CVAR_HORIZON_DAYS + 10:
+                raise ValueError("insufficient FRED history")
+            # print(f"CVaR shock history: {len(raw)} days DGS5+IG-OAS (FRED, attempt {attempt})")
+            return raw["DGS5"].values / 100.0, raw["BAMLC0A0CM"].values / 100.0
+        except Exception as e:
+            # print(f"  CVaR-history FRED attempt {attempt}/{n_retries} failed: {type(e).__name__}")
+            if attempt < n_retries:
+                time.sleep(2 * attempt)
+    # print("  WARNING: FRED history unreachable -- using parametric fallback shocks.")
+    rng = np.random.default_rng(0); n = 250
+    dr = rng.normal(0.0, 0.0035, n)             # ~35bp monthly rate vol
+    ds = 0.3 * dr + rng.normal(0.0, 0.0020, n)  # spread partly co-moves with rates
+    return None, (dr, ds)
+
+
+_hist = _fetch_shock_history()
+if _hist[0] is None:                            # fallback: raw shocks already
+    SCEN_D_RATE, SCEN_D_SPREAD = _hist[1]
+else:
+    _rate_hist, _spread_hist = _hist
+    SCEN_D_RATE, SCEN_D_SPREAD = ff.historical_shock_scenarios(
+        _rate_hist, _spread_hist, horizon_days=CVAR_HORIZON_DAYS, max_scenarios=CVAR_MAX_SCEN)
+
+# Per-bond forced-sale loss coefficients (relative, per $1 allocated) -- linear in h.
+# Base yield = book_yield (the IRR that reprices each bond at its current price), so
+# BV = zero-shock MV reproduces today's book value.
+_bv0     = ff.market_values_under_shocks(bond_cf, t_vec, book_yield,
+                                         np.array([0.0]), np.array([0.0]))[0]    # (N,)
+_mv_scen = ff.market_values_under_shocks(bond_cf, t_vec, book_yield,
+                                         SCEN_D_RATE, SCEN_D_SPREAD)             # (S,N)
+CVAR_RELLOSS = 1.0 - _mv_scen / np.where(_bv0 > 1e-9, _bv0, 1.0)                # (S,N)
+_pavg = np.sort(CVAR_RELLOSS.mean(axis=1))
+# print(f"CVaR scenarios: S={len(SCEN_D_RATE)} | rate shock std {SCEN_D_RATE.std()*1e4:.0f}bp"
+      # f" | spread shock std {SCEN_D_SPREAD.std()*1e4:.0f}bp")
+# print(f"Portfolio-avg loss: worst-5% mean ~ {_pavg[-max(1,len(_pavg)//20):].mean()*100:+.2f}% of book"
+      # f" | median {np.median(_pavg)*100:+.2f}%")
+
+# =============================================================================
 # 10 — Pipeline Output
 # =============================================================================
 pipeline = {
@@ -495,7 +553,6 @@ pipeline = {
     # scalar params
     "H":              H,
     "r_FABN":         r_FABN,
-    "r_float":        float(rf_interp(0.25)),   # 3M Treasury rate — SOFR proxy for swap pricing
     "D_FABN":         D_FABN,
     "C_curr":         C_curr,
     "C_min":          C_min,
@@ -506,6 +563,10 @@ pipeline = {
     "alpha_w":        alpha_w,
     "lambda_w":       lambda_w,
     "eps_D":          eps_D,
+    # CVaR (Step 4)
+    "cvar_d_rate":    SCEN_D_RATE,     # (S,) per-scenario rate shock (swap MV in CVaR)
+    "cvar_relloss":   CVAR_RELLOSS,    # (S,N) per-$ forced-sale loss coefficients
+    "cvar_alpha":     CVAR_ALPHA,      # CVaR tail level (worst 5%)
 }
 
 summary = pd.DataFrame([

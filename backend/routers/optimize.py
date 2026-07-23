@@ -23,6 +23,7 @@ async def run_optimizer(
     w_max:    float = 0.05,
     n_min:    int   = 20,
     vol_percentile: float = risk_service.DEFAULT_PERCENTILE,
+    phi_cvar: float = 0.01,
 ):
     """
     Run the FABN portfolio optimizer and return the full result dict.
@@ -31,15 +32,19 @@ async def run_optimizer(
     ------------
     date      YYYY-MM-DD optimization date (must be in 2022-09-07 … 2027-09-05)
     gamma_w   Cost of capital / WACC (lambda_cap = gamma_w × RBC_bar) — default 0.15
-    lambda_w  Lending facility rate scalar (r_save = r_FABN × lambda_w) — default 1.0
-    eps_D     Duration gap tolerance in years — default 0.3
+    lambda_w  Lending facility rate scalar (r_save = r_FABN × lambda_w) — currently a
+              no-op, since r_FABN's base for facility reinvestment is 0.0 — default 1.0
+    eps_D     Duration gap tolerance in years — relaxed to an inert 100yr band while
+              the CVaR risk constraint governs (always, currently) — default 0.3
     w_max     Max single-bond weight (fraction) — default 0.05
     n_min     Minimum number of bonds — default 20
     vol_percentile  Trading-signal threshold percentile: worth_trading when 21d vol
               exceeds this percentile of its own trailing-year distribution — default 75
+    phi_cvar  CVaR risk budget: worst-5% tail forced-sale loss <= phi_cvar × H.
+              Primary risk control, replaces the old PV-shortfall cap — default 0.01
     """
     result = await asyncio.to_thread(
         optimizer_service.run,
-        date, gamma_w, lambda_w, eps_D, w_max, n_min, vol_percentile,
+        date, gamma_w, lambda_w, eps_D, w_max, n_min, vol_percentile, phi_cvar,
     )
     return result

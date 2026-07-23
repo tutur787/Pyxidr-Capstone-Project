@@ -76,7 +76,8 @@ export default function App() {
       `&eps_D=${p.eps_D}` +
       `&w_max=${p.w_max}` +
       `&n_min=${p.n_min}` +
-      `&vol_percentile=${p.vol_percentile}`
+      `&vol_percentile=${p.vol_percentile}` +
+      `&phi_cvar=${p.phi_cvar}`
     try {
       const res  = await fetch(url)
       const data: OptimizerResult = await res.json()

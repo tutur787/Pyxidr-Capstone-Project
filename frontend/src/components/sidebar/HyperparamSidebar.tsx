@@ -102,7 +102,7 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
 
           <SectionHeader
             title="Objective Weights"
-            subtitle="Scale each term in the SAP objective: maximize NII − lambda·RBC − turnover − liq_penalty + savings"
+            subtitle="Scale each term in the SAP objective: maximize NII − lambda·RBC − turnover + savings + swap NII − swap capital cost"
           />
 
           <ParamSlider
@@ -117,8 +117,8 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
 
           <ParamSlider
             symbol="λ"
-            label="Savings rate scalar"
-            description="Scales the lending-facility reinvestment rate: r_save = r_FABN × λ. Default 1.0 = surplus earns r_FABN (3.205%). Higher = more savings income, rewarding CF surplus accumulation."
+            label="Savings rate scalar (currently inactive)"
+            description="Scales the lending-facility reinvestment rate: r_save = r_FABN × λ. The facility surplus base rate is currently 0.0 (no free parking), so this slider has no effect on any output until that base rate design changes."
             value={params.lambda_w}
             min={0.5} max={2.0} step={0.05}
             format={v => v.toFixed(2)}
@@ -131,9 +131,19 @@ export default function HyperparamSidebar({ open, onClose, params, onChange, onA
           />
 
           <ParamSlider
+            symbol="φ_cvar"
+            label="CVaR risk budget"
+            description="Primary risk control: worst-5% tail forced-sale loss (from historical rate/spread shock scenarios) must stay under φ_cvar × H. Replaces the old PV-shortfall cap. Lower = tighter risk budget, fewer/shorter-duration eligible bonds."
+            value={params.phi_cvar}
+            min={0.005} max={0.02} step={0.0005}
+            format={v => `${(v * 100).toFixed(2)}%`}
+            onChange={v => set('phi_cvar', v)}
+          />
+
+          <ParamSlider
             symbol="ε_D"
-            label="Duration Gap Tolerance"
-            description="Maximum allowed deviation between portfolio duration and FABN liability duration, in years. Calibrated default is 0.3 yr."
+            label="Duration Gap Tolerance (relaxed — CVaR governs)"
+            description="Maximum allowed deviation between portfolio duration and FABN liability duration, in years. Currently relaxed to an inert 100yr band while the CVaR risk constraint governs risk instead — this slider has no effect until CVaR is disabled."
             value={params.eps_D}
             min={0.05} max={2.0} step={0.05}
             format={v => `${v.toFixed(2)} yr`}
