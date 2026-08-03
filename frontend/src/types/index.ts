@@ -3,18 +3,9 @@ export interface PortfolioKPIs {
   total_return: number
   yield_pct: number
   duration: number
-  cvar_pct: number
-  sharpe: number
   n_bonds: number
-  ytd_return: number
   spread_bps: number
   rbc_c1_usage: number
-}
-
-export interface RatePoint {
-  date: string
-  rate_2y: number
-  rate_10y: number
 }
 
 export interface NewsItem {
@@ -33,7 +24,7 @@ export interface ChatMessage {
   timestamp: string
 }
 
-export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-tracking' | 'risk' | 'derivative-usage'
+export type TabId = 'portfolio-deep-dive' | 'suggested-trades' | 'strategy-tracking' | 'risk' | 'derivative-usage' | 'bond-detail'
 
 export interface HyperParams {
   gamma_w:        number
@@ -67,6 +58,49 @@ export interface BondAllocation {
   score_bps:    number
   mid_price:    number   // per $100 face value
   reduced_cost: number   // Gurobi reduced cost: SAP δ per $ of h[i]
+  rbc_factor_pct: number // C-1 RBC factor, pct of face
+}
+
+export interface BondSummary {
+  cusip:          string
+  sector:         string
+  rating_sp:      string
+  rating_moodys:  string
+  coupon_pct:     number | null
+  maturity:       string
+  par_amount:     number | null
+  duration:       number
+  spread_bps:     number
+  rbc_factor_pct: number
+}
+
+export interface BondCashflowPoint {
+  period:          string
+  cf_per_100_face: number
+}
+
+export interface BondDetailData {
+  cusip:              string
+  date:               string
+  sector:             string
+  rating_sp:          string
+  rating_moodys:      string
+  coupon_pct:         number | null
+  cpn_freq:           number | null
+  maturity:           string
+  par_amount:         number | null
+  duration:           number
+  spread_bps:         number
+  rbc_factor_pct:     number
+  mid_price:          number
+  bid_price:          number | null
+  ask_price:          number | null
+  bid_ask_cost_bps:   number
+  book_yield_pct:     number
+  coupon_income_pct:  number
+  amort_income_pct:   number
+  h_curr:             number
+  cashflow_schedule:  BondCashflowPoint[]
 }
 
 export interface Trade {

@@ -10,6 +10,7 @@ import SuggestedTrades from './components/modals/SuggestedTrades'
 import StrategyTracking from './components/modals/StrategyTracking'
 import Risk from './components/modals/Risk'
 import DerivativeUsage from './components/modals/DerivativeUsage'
+import BondDetail from './components/modals/BondDetail'
 import { useDate } from './hooks/useDate'
 import { defaultHyperParams, KNOWN_FABNS } from './data/stubs'
 import type { TabId, HyperParams, Fabn, OptimizerResult, Trade, AppliedTrade, HistoryEntry, FabnMarketPoint } from './types'
@@ -307,6 +308,13 @@ export default function App() {
           onClose={closeModal}
           result={optimizerResult}
           loading={optimizerLoading}
+        />
+      )}
+      {activeModal === 'bond-detail' && (
+        <BondDetail
+          onClose={closeModal}
+          date={date}
+          result={optimizerResult}
         />
       )}
     </div>

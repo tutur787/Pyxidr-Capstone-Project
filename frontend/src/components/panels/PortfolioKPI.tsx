@@ -3,7 +3,6 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import type { OptimizerResult, PortfolioKPIs, HistoryEntry, FabnMarketPoint } from '../../types'
-import { stubKPIs } from '../../data/stubs'
 import FabnMarketChart, { findPointForDate } from './FabnMarketChart'
 
 interface Props {
@@ -189,20 +188,17 @@ export default function PortfolioKPI({
     setExpandedKPI(prev => prev === label ? null : label)
   }
 
-  const kpis: PortfolioKPIs = isOptimal && optimizerResult
+  const kpis: PortfolioKPIs | null = isOptimal && optimizerResult
     ? {
         value:        500_000_000,
         total_return: (optimizerResult.nev / 500_000_000) * 100,
         yield_pct:    optimizerResult.yield_pct,
         duration:     optimizerResult.duration,
-        cvar_pct:     2.87,
-        sharpe:       1.34,
         n_bonds:      optimizerResult.n_bonds_selected,
-        ytd_return:   3.41,
         spread_bps:   optimizerResult.spread_bps,
         rbc_c1_usage: optimizerResult.rbc_c1_usage,
       }
-    : stubKPIs
+    : null
 
   // Live replacements for stub fields
   const liveYtdReturn = isOptimal ? optimizerResult!.yield_pct * ytdFraction(date) : null
@@ -260,7 +256,7 @@ export default function PortfolioKPI({
         <div className="flex items-center gap-2">
           {loading && <span className="text-amber-400 text-xs animate-pulse">Optimizing…</span>}
           <span className={`px-2 py-1 border text-xs rounded-full ${badgeClass}`}>
-            {isOptimal ? '● Optimizer' : '○ Stub'}
+            {isOptimal ? '● Optimizer' : loading ? '○ Loading…' : '○ No data'}
           </span>
         </div>
       </div>
@@ -382,7 +378,7 @@ export default function PortfolioKPI({
         <div className="grid grid-cols-2 gap-3">
           <Metric
             label="Portfolio Value"
-            value={marketValue !== null ? formatValue(marketValue) : formatValue(kpis.value)}
+            value={marketValue !== null ? formatValue(marketValue) : kpis !== null ? formatValue(kpis.value) : '—'}
             neutral
             live={isOptimal}
             onClick={() => toggleKPI('Portfolio Value')}
@@ -392,37 +388,35 @@ export default function PortfolioKPI({
           />
           <Metric
             label="Net SAP Rate"
-            value={`${kpis.total_return >= 0 ? '+' : ''}${kpis.total_return.toFixed(2)}%`}
-            change={kpis.total_return}
+            value={kpis !== null ? `${kpis.total_return >= 0 ? '+' : ''}${kpis.total_return.toFixed(2)}%` : '—'}
+            change={kpis?.total_return}
             live={isOptimal}
             title="SAP objective ÷ $500M — net statutory income rate on invested capital"
           />
           <Metric
             label="YTD Return"
-            value={liveYtdReturn !== null
-              ? `+${liveYtdReturn.toFixed(2)}%`
-              : `${kpis.ytd_return >= 0 ? '+' : ''}${kpis.ytd_return.toFixed(2)}%`}
-            change={liveYtdReturn ?? kpis.ytd_return}
+            value={liveYtdReturn !== null ? `+${liveYtdReturn.toFixed(2)}%` : '—'}
+            change={liveYtdReturn ?? undefined}
             live={isOptimal}
             sublabel={liveYtdReturn !== null ? `${(ytdFraction(date) * 365).toFixed(0)} days elapsed` : undefined}
             title="Accrued statutory book yield YTD = book yield × days since Jan 1"
           />
           <Metric
             label="Portfolio Yield"
-            value={kpis.yield_pct.toFixed(2)} unit="%"
+            value={kpis !== null ? kpis.yield_pct.toFixed(2) : '—'} unit="%"
             neutral live={isOptimal}
             title="Weighted-average book yield (coupon + amortization/accretion)"
           />
           <Metric
             label="Duration"
-            value={kpis.duration.toFixed(2)} unit="yrs"
+            value={kpis !== null ? kpis.duration.toFixed(2) : '—'} unit="yrs"
             neutral live={isOptimal}
             title="Weighted-average modified duration of the optimal portfolio"
           />
           <Metric
             label="CVaR (95%)"
-            value={liveCvar != null ? `${liveCvar.toFixed(2)}%` : `${kpis.cvar_pct.toFixed(2)}%`}
-            change={-(liveCvar ?? kpis.cvar_pct)}
+            value={liveCvar != null ? `${liveCvar.toFixed(2)}%` : '—'}
+            change={liveCvar != null ? -liveCvar : undefined}
             live={isOptimal && liveCvar != null}
             valueColor={isOptimal && optimizerResult?.cvar_degraded ? 'text-amber-500' : undefined}
             sublabel={
@@ -430,37 +424,37 @@ export default function PortfolioKPI({
                 ? liveCvar != null
                   ? `${optimizerResult.cvar_n_obs} days${optimizerResult.cvar_degraded ? ' · low sample' : ''}`
                   : 'insufficient history'
-                : '≈ 200 bps shock (stub)'
+                : loading ? 'optimizer running…' : 'optimizer not yet run'
             }
             title={
               isOptimal
                 ? `Historical-simulation CVaR, scaled to a 1-quarter horizon: expected market-value loss in the worst 5% of daily FABN yield moves (${optimizerResult?.cvar_n_obs ?? 0} historical days), duration-mapped to this portfolio.${optimizerResult?.cvar_degraded ? ' Fewer than 60 observations available — treat as indicative only.' : ''}`
-                : 'Market-value drop at 200 bps parallel rate shock (duration × 2%). Stub placeholder — run the optimizer for the real historical-simulation CVaR.'
+                : 'Run the optimizer to see the real historical-simulation CVaR.'
             }
           />
           <Metric
             label="Capital Eff."
-            value={liveCapEff !== null ? liveCapEff.toFixed(3) : kpis.sharpe.toFixed(2)}
-            change={(liveCapEff ?? kpis.sharpe) - 1}
+            value={liveCapEff !== null ? liveCapEff.toFixed(3) : '—'}
+            change={liveCapEff !== null ? liveCapEff - 1 : undefined}
             live={isOptimal}
             sublabel="NII / req. capital"
             title="Statutory NII ÷ required regulatory capital. >1 means the portfolio earns more than its regulatory burden."
           />
           <Metric
             label="Avg Spread"
-            value={kpis.spread_bps.toFixed(1)} unit="bps"
+            value={kpis !== null ? kpis.spread_bps.toFixed(1) : '—'} unit="bps"
             neutral live={isOptimal}
             title="Weighted-average OAS spread of the selected bonds"
           />
           <Metric
             label="# Bonds"
-            value={kpis.n_bonds.toString()}
+            value={kpis !== null ? kpis.n_bonds.toString() : '—'}
             neutral live={isOptimal}
             title="Number of bonds with allocation > $1 in the optimal portfolio"
           />
           <Metric
             label="RBC C1 Usage"
-            value={`${(kpis.rbc_c1_usage * 100).toFixed(1)}%`}
+            value={kpis !== null ? `${(kpis.rbc_c1_usage * 100).toFixed(1)}%` : '—'}
             neutral live={isOptimal}
             title="C1 capital charge as % of portfolio: Σ(theta_i × h_i) / H"
           />

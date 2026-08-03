@@ -13,6 +13,7 @@ const TABS: Tab[] = [
   { id: 'strategy-tracking', label: 'Strategy Tracking', order: 3 },
   { id: 'risk', label: 'Risk', order: 4 },
   { id: 'derivative-usage', label: 'Derivative Usage', order: 5 },
+  { id: 'bond-detail', label: 'Bond Detail', order: 6 },
 ]
 
 interface Props {

@@ -1,16 +1,10 @@
 import logging
 from fastapi import APIRouter
 from pydantic import BaseModel
-from services.bigquery_service import get_portfolio_kpis
 from services import optimizer_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
-
-
-@router.get("/kpis")
-def get_kpis(date: str = "2025-01-15"):
-    return get_portfolio_kpis(date)
 
 
 class ApplyTradeRequest(BaseModel):

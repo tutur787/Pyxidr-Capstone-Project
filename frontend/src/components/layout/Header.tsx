@@ -324,18 +324,15 @@ export default function Header({
           )}
         </div>
 
-        {/* Right: profile */}
+        {/* Right: menu */}
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setProfileOpen(p => !p)}
             className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-surface-2 transition-colors border border-transparent hover:border-border"
+            aria-label="Open menu"
           >
             <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm">
-              J
-            </div>
-            <div className="hidden sm:block text-left">
-              <p className="text-text-primary text-sm font-medium leading-none">John Doe</p>
-              <p className="text-text-muted text-xs mt-0.5">Portfolio Manager</p>
+              ⚙
             </div>
             <span className="text-text-muted text-xs ml-1">▾</span>
           </button>
@@ -343,22 +340,15 @@ export default function Header({
           {profileOpen && (
             <div className="glass absolute right-0 top-full mt-2 w-52 border border-border rounded-2xl shadow-2xl py-2 z-[200]">
               <div className="px-4 py-2 border-b border-border">
-                <p className="text-text-primary text-sm font-medium">John Doe</p>
-                <p className="text-text-secondary text-xs">johndoe@example.com</p>
-              </div>
-              <div className="px-4 py-2">
                 <p className="text-text-muted text-xs">Simulated date</p>
                 <p className="text-brand text-xs font-mono">{date}</p>
               </div>
-              <div className="px-2 pt-1 border-t border-border">
+              <div className="px-2 pt-1">
                 <button
                   onClick={() => { setSettingsOpen(true); setProfileOpen(false) }}
                   className="w-full text-left px-2 py-1.5 text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-xl text-sm transition-colors"
                 >
                   Settings
-                </button>
-                <button className="w-full text-left px-2 py-1.5 text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-xl text-sm transition-colors">
-                  Sign out
                 </button>
               </div>
             </div>

@@ -16,8 +16,6 @@ const STUBS: BondRate[] = [
   { symbol: 'US3M',  name: 'US T-Bill 3M',  yield_pct: 5.25, change_bps:  2, direction: 'up'   },
   { symbol: 'US1Y',  name: 'US Treasury 1Y', yield_pct: 5.10, change_bps: -1, direction: 'down' },
   { symbol: 'US5Y',  name: 'US Treasury 5Y', yield_pct: 4.35, change_bps:  3, direction: 'up'   },
-  { symbol: 'GILTS', name: 'UK Gilts 10Y',   yield_pct: 4.20, change_bps: -2, direction: 'down' },
-  { symbol: 'CAD5Y', name: 'CAD Govt 5Y',    yield_pct: 3.75, change_bps:  1, direction: 'up'   },
 ]
 
 function RateRow({ r }: { r: BondRate }) {

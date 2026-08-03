@@ -539,6 +539,8 @@ pipeline = {
 
     # SAP statutory-accounting arrays (shape N) — from Section 9.5
     "price":          price,
+    "bid":            bid,
+    "ask":            ask,
     "book_yield":     book_yield,
     "coupon_inc":     coupon_inc,
     "amort_inc":      amort_inc,

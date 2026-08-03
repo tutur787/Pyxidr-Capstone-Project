@@ -1,37 +1,4 @@
-import type { PortfolioKPIs, RatePoint, NewsItem, HyperParams, Fabn } from '../types'
-
-export const stubKPIs: PortfolioKPIs = {
-  value: 250_000_000,
-  total_return: 1.52,
-  yield_pct: 5.83,
-  duration: 4.21,
-  cvar_pct: 2.87,
-  sharpe: 1.34,
-  n_bonds: 104,
-  ytd_return: 3.41,
-  spread_bps: 71,
-  rbc_c1_usage: 0.62,
-}
-
-function sineRate(base: number, amp: number, i: number, period: number) {
-  return +(base + amp * Math.sin((2 * Math.PI * i) / period) + (Math.random() - 0.5) * 0.04).toFixed(3)
-}
-
-export function generateStubRates(anchorDate: string, n = 90): RatePoint[] {
-  const points: RatePoint[] = []
-  const d = new Date(anchorDate)
-  d.setDate(d.getDate() - n)
-  for (let i = 0; i < n; i++) {
-    const cur = new Date(d)
-    cur.setDate(cur.getDate() + i)
-    points.push({
-      date: cur.toISOString().slice(0, 10),
-      rate_2y: sineRate(5.1, 0.3, i, 40),
-      rate_10y: sineRate(4.3, 0.2, i, 60),
-    })
-  }
-  return points
-}
+import type { NewsItem, HyperParams, Fabn } from '../types'
 
 export const stubNews: NewsItem[] = [
   { date: '', headline: 'Fed signals pause in rate hikes amid cooling inflation data', source: 'Reuters', sentiment: 'positive', score: 0.71, issuer: 'Macro' },
@@ -63,23 +30,6 @@ export const KNOWN_FABNS: Fabn[] = [
     rating:   'A+',
     sector:   'Athene Global Funding',
     status:   'active',
-  },
-  // Future issuances — not modeled yet, shown as placeholders rather than omitted.
-  {
-    cusip:    'Next FABN — 2026',
-    coupon:   null,
-    maturity: '',
-    rating:   '',
-    sector:   'Not yet issued',
-    status:   'coming_soon',
-  },
-  {
-    cusip:    'Next FABN — 2027',
-    coupon:   null,
-    maturity: '',
-    rating:   '',
-    sector:   'Not yet issued',
-    status:   'coming_soon',
   },
 ]
 

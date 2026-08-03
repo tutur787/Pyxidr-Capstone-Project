@@ -130,6 +130,24 @@ def _get_pipeline(date: str) -> dict:
         return _pipeline_cache[date]
 
 
+def get_pipeline(date: str) -> dict:
+    """Public accessor for the cached pipeline dict (no Gurobi solve). Used by
+    bond_service.py to read per-bond universe data without paying for a solve."""
+    return _get_pipeline(date)
+
+
+def apply_portfolio_overrides(pipeline: dict) -> dict:
+    """Return a pipeline dict whose h_curr reflects any session-applied trades.
+    Does not mutate the cached pipeline (returns a shallow copy when overrides exist)."""
+    if not _applied_portfolio:
+        return pipeline
+    h_curr_raw = pipeline["h_curr"].copy()
+    for i, c in enumerate(pipeline["CUSIPS"]):
+        if c in _applied_portfolio:
+            h_curr_raw[i] = _applied_portfolio[c]
+    return {**pipeline, "h_curr": h_curr_raw}
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Public entry point
 # ═════════════════════════════════════════════════════════════════════════════
@@ -172,12 +190,7 @@ def _solve(
     pipeline = _get_pipeline(date)
 
     # ── 1. Inject applied-trade overrides into h_curr ─────────────────────
-    if _applied_portfolio:
-        h_curr_raw = pipeline["h_curr"].copy()
-        for i, c in enumerate(pipeline["CUSIPS"]):
-            if c in _applied_portfolio:
-                h_curr_raw[i] = _applied_portfolio[c]
-        pipeline = {**pipeline, "h_curr": h_curr_raw}
+    pipeline = apply_portfolio_overrides(pipeline)
 
     # ── 1A. Unpack pipeline ────────────────────────────────────────────────
     N           = pipeline["N"]

@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
+import ssl
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
+import certifi
 from dotenv import load_dotenv
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -261,14 +263,12 @@ def fetch_market_quotes(date: str) -> list[dict]:
         return []
 
 
-# ── Bond market rates (US Treasury XML + stubs for Gilts/CAD) ────────────────
+# ── Bond market rates (US Treasury XML) ──────────────────────────────────────
 
-_BOND_STUB = [
+BOND_STUB = [
     {"symbol": "US3M",  "name": "US T-Bill 3M",    "yield_pct": 5.25, "change_bps":  2, "direction": "up"},
     {"symbol": "US1Y",  "name": "US Treasury 1Y",   "yield_pct": 5.10, "change_bps": -1, "direction": "down"},
     {"symbol": "US5Y",  "name": "US Treasury 5Y",   "yield_pct": 4.35, "change_bps":  3, "direction": "up"},
-    {"symbol": "GILTS", "name": "UK Gilts 10Y",     "yield_pct": 4.20, "change_bps": -2, "direction": "down"},
-    {"symbol": "CAD5Y", "name": "CAD Govt 5Y",      "yield_pct": 3.75, "change_bps":  1, "direction": "up"},
 ]
 
 _TREASURY_XML = (
@@ -277,6 +277,7 @@ _TREASURY_XML = (
     "&field_tdr_date_value_month={ym}"
 )
 _NS = "http://schemas.microsoft.com/ado/2007/08/dataservices"
+_SSL_CTX = ssl.create_default_context(cafile=certifi.where())
 
 
 def _parse_treasury_xml(date: str) -> dict[str, float]:
@@ -286,7 +287,7 @@ def _parse_treasury_xml(date: str) -> dict[str, float]:
     dt = datetime.strptime(date, "%Y-%m-%d")
     url = _TREASURY_XML.format(ym=dt.strftime("%Y%m"))
     req = urllib.request.Request(url, headers={"User-Agent": "fabn-dashboard/1.0"})
-    with urllib.request.urlopen(req, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=8, context=_SSL_CTX) as resp:
         tree = ET.parse(resp)
 
     target_date = dt.strftime("%Y-%m-%dT00:00:00")
@@ -316,10 +317,8 @@ def _parse_treasury_xml(date: str) -> dict[str, float]:
 
 def fetch_bond_rates(date: str) -> list[dict]:
     """
-    Return reference rates for 5 fixed-income benchmarks at `date`.
-
-    US rates come from the US Treasury yield curve feed (free, no API key).
-    UK Gilts and CAD Govt use stub values (live integration pending).
+    Return reference rates for 3 US Treasury benchmarks at `date`, from the
+    US Treasury yield curve feed (free, no API key).
 
     Each element: { symbol, name, yield_pct, change_bps, direction }
     Falls back to stubs on any error.
@@ -328,7 +327,7 @@ def fetch_bond_rates(date: str) -> list[dict]:
         yields = _parse_treasury_xml(date)
         if not yields:
             logger.warning("Treasury XML returned no data for date=%s", date)
-            return _BOND_STUB
+            return BOND_STUB
 
         # Try to get previous trading day to compute day change
         prev_date = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=3)).strftime("%Y-%m-%d")
@@ -359,13 +358,9 @@ def fetch_bond_rates(date: str) -> list[dict]:
                 "direction":  direction,
             })
 
-        # Gilts and CAD: stubs (no free unauthenticated API currently wired)
-        for stub in _BOND_STUB[3:]:
-            results.append(stub)
-
         logger.info("Bond rates: %d instruments for date=%s", len(results), date)
         return results
 
     except Exception as exc:
         logger.error("Bond rates fetch failed: %s", exc)
-        return _BOND_STUB
+        return BOND_STUB
