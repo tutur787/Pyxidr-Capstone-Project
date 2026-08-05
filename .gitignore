@@ -9,3 +9,4 @@ gurobi.lic
 data/output/*
 package-lock.json
 README.md
+frontend/node_modules/
