@@ -37,6 +37,12 @@ PRICE_TABLES = {
     "ask": "{project}.Ask_Price.ask_long_raw",
 }
 
+# CVaR tail-loss scenarios (Step 4): historical rate+spread shocks used to build
+# the forced-sale loss coefficients that feed the solver's CVaR risk limit.
+CVAR_HORIZON_DAYS = 21     # ~1 trading month change horizon
+CVAR_MAX_SCEN = 250
+CVAR_ALPHA = 0.95          # tail level (worst 5%)
+
 
 @dataclass
 class FabnPipelineParams:
@@ -53,7 +59,7 @@ class FabnPipelineParams:
     H: float = 500_000_000.0
     C_curr: float = 5_000_000.0
     C_min: float = 1_000_000.0
-    RBC_bar: float = 1.5
+    RBC_bar: float = 3.0
     dt: float = 1.0
 
     gamma_w: float = 0.15
@@ -61,6 +67,7 @@ class FabnPipelineParams:
     eps_D: float = 0.3
     w_max: float = 0.05
     n_min: int = 20
+    phi_cvar: float = 0.01
 
     beta_w: float = 0.0
     alpha_w: float = 0.0
@@ -103,6 +110,41 @@ def _fetch_treasury_curve(optimization_date: pd.Timestamp, n_retries: int = 3) -
         type(last_err).__name__ if last_err else "unknown",
     )
     return pd.Series(FRED_FALLBACK, index=MATURITIES_YRS, name=optimization_date)
+
+
+def _fetch_shock_history(optimization_date: pd.Timestamp, n_retries: int = 3) -> tuple[np.ndarray | None, tuple]:
+    """~2yr history of 5yr UST (DGS5) and IG corp OAS (BAMLC0A0CM) from FRED.
+
+    Returns ``(rate_hist, spread_hist)`` on success, or ``(None, (dr, ds))`` with
+    parametric fallback raw shocks if FRED is unreachable.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, n_retries + 1):
+        try:
+            raw = web.DataReader(
+                ["DGS5", "BAMLC0A0CM"],
+                "fred",
+                start=optimization_date - pd.Timedelta(days=760),
+                end=optimization_date,
+            ).dropna(how="any")
+            if len(raw) < CVAR_HORIZON_DAYS + 10:
+                raise ValueError("insufficient FRED history")
+            logger.info("CVaR shock history: %d days DGS5+IG-OAS (FRED, attempt %d)", len(raw), attempt)
+            return raw["DGS5"].values / 100.0, raw["BAMLC0A0CM"].values / 100.0
+        except Exception as exc:
+            last_err = exc
+            logger.warning("CVaR-history FRED attempt %d/%d failed: %s", attempt, n_retries, type(exc).__name__)
+            if attempt < n_retries:
+                time.sleep(2 * attempt)
+    logger.warning(
+        "FRED history unreachable (%s); using parametric fallback shocks",
+        type(last_err).__name__ if last_err else "unknown",
+    )
+    rng = np.random.default_rng(0)
+    n = 250
+    dr = rng.normal(0.0, 0.0035, n)             # ~35bp monthly rate vol
+    ds = 0.3 * dr + rng.normal(0.0, 0.0020, n)  # spread partly co-moves with rates
+    return None, (dr, ds)
 
 
 def _nearest_price_map(
@@ -357,6 +399,26 @@ def build_pipeline(
     tau = np.where(tau_valid, tau, np.nan)
     tau = np.where(np.isnan(tau), np.nanmedian(tau), tau)
 
+    # ── CVaR tail-loss scenarios (Step 4) ──────────────────────────────────
+    # Tail risk = the book-value-vs-market-value gap at a forced unwind. Build the
+    # loss distribution from historical joint moves of a benchmark Treasury rate
+    # (DGS5) and the IG corporate OAS (BAMLC0A0CM) -- real data, no distributional
+    # assumption -- then reprice every bond's cashflows under each shock.
+    # cvar_relloss[s, i] = 1 - MV_i(shock_s)/BV_i is the per-$ forced-sale loss
+    # (linear in the holdings) that feeds a Rockafellar-Uryasev CVaR limit in the
+    # solver. Base yield = book_yield, so BV = zero-shock MV reproduces book value.
+    hist = _fetch_shock_history(optimization_date)
+    if hist[0] is None:
+        cvar_d_rate, cvar_d_spread = hist[1]
+    else:
+        rate_hist, spread_hist = hist
+        cvar_d_rate, cvar_d_spread = ff.historical_shock_scenarios(
+            rate_hist, spread_hist, horizon_days=CVAR_HORIZON_DAYS, max_scenarios=CVAR_MAX_SCEN,
+        )
+    bv0 = ff.market_values_under_shocks(bond_cf, t_vec, book_yield, np.array([0.0]), np.array([0.0]))[0]
+    mv_scen = ff.market_values_under_shocks(bond_cf, t_vec, book_yield, cvar_d_rate, cvar_d_spread)
+    cvar_relloss = 1.0 - mv_scen / np.where(bv0 > 1e-9, bv0, 1.0)
+
     logger.info(
         "pipeline ready N=%d T=%d Q=%d spread_mean_bps=%.1f book_yield_mean=%.2f%% D_FABN=%.4f",
         n, t, q,
@@ -388,6 +450,9 @@ def build_pipeline(
         "qtr_fabn_cf": qtr_fabn_cf,
         "qtr_idx": qtr_idx,
         "t_vec": t_vec,
+        "cvar_d_rate": cvar_d_rate,     # (S,) per-scenario rate shock (swap MV)
+        "cvar_relloss": cvar_relloss,   # (S,N) per-$ forced-sale loss coefficients
+        "cvar_alpha": CVAR_ALPHA,       # CVaR tail level (worst 5%)
         "H": h,
         "r_FABN": r_fabn,
         "D_FABN": d_fabn,
@@ -400,4 +465,5 @@ def build_pipeline(
         "alpha_w": p.alpha_w,
         "lambda_w": p.lambda_w,
         "eps_D": p.eps_D,
+        "phi_cvar": p.phi_cvar,
     }
