@@ -304,3 +304,215 @@ def blend_cost_basis(retained_dollars, cb_old, buy_dollars, buy_px, par=100.0):
     return np.where(tot > 1e-12,
                     (retained_dollars * cb_old + buy_dollars * buy_px) / np.where(tot > 1e-12, tot, 1.0),
                     par)
+
+
+# ---------------------------------------------------------------------------
+# Interest Rate Swaps — plain vanilla receive-fixed / pay-floating
+# ---------------------------------------------------------------------------
+# All three functions model a RECEIVE-FIXED swap from the portfolio's perspective:
+# we receive the fixed leg (known coupon stream) and pay floating (SOFR-linked).
+# Duration is positive (like holding a bond); fair value rises when rates rise.
+#
+# Convention: notional = $1; scale by actual notional in the optimizer.
+# ---------------------------------------------------------------------------
+
+def swap_fixed_leg_duration(maturity_years, fixed_rate, r_discount, settlement_freq=2):
+    """Modified duration of a receive-fixed interest rate swap per $1 notional.
+
+    Computed as the modified duration of a par bond with the same coupon and
+    maturity — the standard ALM equivalence: a receive-fixed swap changes
+    portfolio rate sensitivity exactly like adding a par fixed-rate bond and
+    removing a par floater (duration ≈ 0).
+
+    Parameters
+    ----------
+    maturity_years : float
+        Swap tenor in years.
+    fixed_rate : float
+        Annual fixed coupon rate, decimal (e.g. 0.044 for 4.40%).
+    r_discount : float
+        Annual discount rate for PV, decimal; use the current risk-free rate.
+    settlement_freq : int
+        Settlements per year: 2 = semi-annual (standard IRS), 4 = quarterly.
+
+    Returns
+    -------
+    float
+        Modified duration in years. Positive for receive-fixed.
+        Returns ``np.nan`` if inputs are degenerate.
+    """
+    n = int(round(maturity_years * settlement_freq))
+    if n == 0:
+        return np.nan
+    dt = 1.0 / settlement_freq
+    t = np.arange(1, n + 1, dtype=float) * dt          # settlement times (years)
+    cf = np.full(n, fixed_rate * dt)                    # coupon cash flows per $1
+    cf[-1] += 1.0                                        # implicit notional at maturity
+    return modified_duration(cf, t, r_discount)
+
+
+def swap_quarterly_cashflows(fixed_rate, r_float, maturity_years, n_quarters,
+                             settlement_freq=2):
+    """Net quarterly cash flows of a receive-fixed swap per $1 notional.
+
+    Maps swap settlements onto the optimizer's quarterly grid. Positive values
+    are cash received (floating > fixed); negative are cash paid (fixed > floating).
+    Quarters beyond swap maturity are zero.
+
+    Parameters
+    ----------
+    fixed_rate : float
+        Annual fixed rate received by us (receive-fixed), decimal.
+    r_float : float or array-like of length n_quarters
+        Annual floating rate received. Scalar = constant (single-period use);
+        array = rate per quarter (backtest use, one entry per quarter).
+    maturity_years : float
+        Swap tenor in years (must be a multiple of 0.25 * settlement_freq / 2 to
+        land on a quarter boundary; otherwise truncated to nearest settlement).
+    n_quarters : int
+        Total number of quarters in the optimizer grid (len of qtr_bond_cf axis 0).
+    settlement_freq : int
+        Swap settlement frequency per year (2 = semi-annual, 4 = quarterly).
+
+    Returns
+    -------
+    np.ndarray, shape (n_quarters,)
+        Net cash flow per $1 notional for each quarter.
+        Positive when fixed > float (we receive more than we pay).
+    """
+    dt_q       = 0.25                                   # quarter length (years)
+    dt_settle  = 1.0 / settlement_freq                  # accrual period per settlement
+    q_per_set  = max(1, int(round(dt_settle / dt_q)))   # quarters between settlements
+    n_settle   = int(round(maturity_years * settlement_freq))
+
+    r_float = np.asarray(r_float, dtype=float)
+    scalar  = r_float.ndim == 0
+
+    cf = np.zeros(n_quarters)
+    for k in range(n_settle):
+        settle_q = (k + 1) * q_per_set - 1             # 0-indexed quarter of cash flow
+        if settle_q >= n_quarters:
+            break
+        if scalar:
+            rf_k = float(r_float)
+        else:
+            q0 = k * q_per_set
+            q1 = settle_q + 1
+            rf_k = float(r_float[max(0, q0):min(len(r_float), q1)].mean())
+        cf[settle_q] = (fixed_rate - rf_k) * dt_settle   # receive-fixed net: fixed − float
+    return cf
+
+
+def swap_fair_value(fixed_rate, r_market, maturity_years, settlement_freq=2):
+    """Mark-to-market fair value of a receive-fixed swap per $1 notional.
+
+    Approximates fair value as PV(fixed leg at r_market) minus par (= PV of the
+    floating leg, which always reprices to par at the next reset). Positive when
+    r_market < fixed_rate (rates have FALLEN since inception — fixed receipts are
+    above market, so the swap is in-the-money for the receive-fixed party).
+    Negative when r_market > fixed_rate (rates have risen — out-of-the-money).
+    Used for risk reporting and IMR treatment of unwinds; NOT used directly in the
+    LP objective (which is SAP book-based).
+
+    Parameters
+    ----------
+    fixed_rate : float
+        Annual fixed rate agreed at inception, decimal.
+    r_market : float
+        Current market rate for a new swap of the same remaining tenor, decimal.
+    maturity_years : float
+        Remaining tenor in years.
+    settlement_freq : int
+        Settlements per year.
+
+    Returns
+    -------
+    float
+        Fair value per $1 notional.  0.0 if maturity_years <= 0.
+    """
+    if maturity_years <= 0:
+        return 0.0
+    n = int(round(maturity_years * settlement_freq))
+    if n == 0:
+        return 0.0
+    dt = 1.0 / settlement_freq
+    t  = np.arange(1, n + 1, dtype=float) * dt
+    cf = np.full(n, fixed_rate * dt)
+    cf[-1] += 1.0                                        # implicit notional
+    pv_fixed = float((cf * (1.0 + r_market) ** (-t)).sum())
+    return pv_fixed - 1.0                                # minus PV(floating leg) = par
+
+
+# ---------------------------------------------------------------------------
+# CVaR support (Phase 2 / Step 4) — scenario generation + mark-to-market pricing
+# ---------------------------------------------------------------------------
+# The tail risk the FABN book actually cares about is the book-value-vs-market-
+# value gap at a forced unwind (Robin: "the real risk is the book-vs-market gap
+# at maturity, not exact cash-flow dedication"). To bound it with a CVaR limit we
+# need (a) a set of rate+spread shock scenarios and (b) the market value of each
+# bond under each scenario. Both are pure functions so they can be unit-tested and
+# shared by the static optimizer and the backtest (single source of truth).
+
+def historical_shock_scenarios(rate_hist, spread_hist, horizon_days=21, max_scenarios=250):
+    """Joint (rate, spread) shock scenarios from historical levels.
+
+    Each overlapping ``horizon_days`` change in the representative risk-free rate
+    and OAS spread is one scenario, so the empirical rate/spread co-movement (and
+    fat tails) is preserved without any distributional assumption.
+
+    Parameters
+    ----------
+    rate_hist, spread_hist : array-like
+        Time series (decimal) of a representative risk-free rate and OAS spread.
+    horizon_days : int
+        Change horizon in observations (e.g. ~21 ≈ one trading month).
+    max_scenarios : int
+        Cap on the number of scenarios (evenly subsampled if exceeded).
+
+    Returns
+    -------
+    (np.ndarray, np.ndarray)
+        ``d_rate``, ``d_spread`` — equal-length shock arrays (decimal).
+    """
+    r = np.asarray(rate_hist, dtype=float)
+    s = np.asarray(spread_hist, dtype=float)
+    k = max(int(horizon_days), 1)
+    if len(r) <= k or len(s) <= k:
+        return np.zeros(0), np.zeros(0)
+    dr = r[k:] - r[:-k]
+    ds = s[k:] - s[:-k]
+    m = np.isfinite(dr) & np.isfinite(ds)
+    dr, ds = dr[m], ds[m]
+    if len(dr) > max_scenarios and len(dr) > 0:
+        idx = np.linspace(0, len(dr) - 1, max_scenarios).astype(int)
+        dr, ds = dr[idx], ds[idx]
+    return dr, ds
+
+
+def market_values_under_shocks(bond_cf, t_vec, base_yields, d_rate, d_spread):
+    """Market value per $1 face of each bond under each (rate, spread) shock.
+
+    ``MV[s, n] = sum_t cf[t, n] * (1 + y0_n + dr_s + ds_s) ** (-t)`` — each bond's
+    cashflows re-discounted at its base yield plus a parallel rate shock and a
+    uniform spread shock. Higher yields (rate/spread up) → lower MV, so
+    ``BV - MV`` is the forced-sale loss the CVaR limit will cap.
+
+    Parameters
+    ----------
+    bond_cf : (T, N) array — cashflows per $1 face, aligned to ``t_vec``.
+    t_vec   : (T,) array — times in years.
+    base_yields : (N,) array — current discount yield per bond (rf + spread).
+    d_rate, d_spread : (S,) arrays — per-scenario shocks (decimal).
+
+    Returns
+    -------
+    (S, N) np.ndarray — market value per $1 face.
+    """
+    cf = np.asarray(bond_cf, dtype=float)          # (T, N)
+    t = np.asarray(t_vec, dtype=float)             # (T,)
+    y0 = np.asarray(base_yields, dtype=float)      # (N,)
+    dy = np.asarray(d_rate, dtype=float) + np.asarray(d_spread, dtype=float)  # (S,)
+    yS = y0[None, :] + dy[:, None]                 # (S, N) shocked yield
+    yS = np.maximum(yS, -0.99)                     # guard against (1+y)<=0
+    disc = (1.0 + yS)[:, :, None] ** (-t[None, None, :])   # (S, N, T)
+    return np.einsum("tn,snt->sn", cf, disc)       # (S, N)

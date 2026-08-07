@@ -24,8 +24,13 @@ gcp-credentials.json
 # Raw data — too large; mount as volume at runtime
 data/
 
-# Large source files never needed in the image
-Optimization/
+# Optimization/ holds heavy research notebooks/data not needed in any image.
+# Exception: the backend image needs fabn_data_pipeline.py + fabn_finance.py
+# (see backend/services/optimizer_service.py, which runs the pipeline via
+# runpy against that exact path) — exclude everything else explicitly.
+Optimization/*
+!Optimization/fabn_data_pipeline.py
+!Optimization/fabn_finance.py
 Regulations/
 
 # Editor / OS artifacts

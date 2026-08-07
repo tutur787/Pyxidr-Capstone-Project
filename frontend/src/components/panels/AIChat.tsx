@@ -1,5 +1,27 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
 import type { ChatMessage } from '../../types'
+
+// Compact overrides for the chat bubble: Tailwind's preflight reset strips
+// default list/paragraph styling, so these have to be restored explicitly
+// (no @tailwindcss/typography plugin in this project).
+const markdownComponents: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold text-text-primary">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
+  code: ({ children }) => (
+    <code className="bg-surface-3 px-1 py-0.5 rounded text-[11px] font-mono">{children}</code>
+  ),
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noreferrer" className="underline text-brand hover:text-brand-hover">
+      {children}
+    </a>
+  ),
+}
 
 const WELCOME: ChatMessage = {
   role: 'assistant',
@@ -120,7 +142,11 @@ export default function AIChat() {
                 ? 'bg-amber-500/15 border border-amber-500/20 text-amber-100'
                 : 'bg-surface-2 border border-border text-text-secondary'
               }`}>
-              <p>{msg.content}</p>
+              {msg.role === 'assistant' ? (
+                <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+              ) : (
+                <p>{msg.content}</p>
+              )}
               <p className="text-text-muted text-[10px] mt-1 text-right">{msg.timestamp}</p>
             </div>
           </div>

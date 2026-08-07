@@ -26,6 +26,8 @@
 | `make run` | Run the optimization pipeline |
 | `make notebook` | Start JupyterLab at http://localhost:8888 |
 | `make shell` | Open a bash shell inside the container |
+| `make dashboard` | Build + run the FastAPI backend (http://localhost:8000) and React dashboard (http://localhost:4173) |
+| `make dashboard-down` | Stop the backend + frontend containers |
 | `make down` | Stop running containers |
 | `make clean` | Stop containers and remove volumes |
 | `make help` | Print available commands |

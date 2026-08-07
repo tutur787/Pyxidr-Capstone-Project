@@ -86,7 +86,11 @@ def answer_explain_question(question: str, live_context_json: str) -> str:
     )
     messages = [{"role": "user", "content": prompt}]
     logger.info("HF inference explain model=%s", _model_id())
-    response = client.chat_completion(messages=messages, max_tokens=700, temperature=0)
+    # 250 tokens is generous headroom over the prompt's 180-word hard cap (roughly
+    # 240 tokens at ~1.3 tokens/word) — enough that a compliant answer never
+    # truncates mid-sentence, tight enough that a non-compliant one gets capped
+    # fast rather than rambling for hundreds of tokens before cutting off.
+    response = client.chat_completion(messages=messages, max_tokens=250, temperature=0)
     return _completion_content(response).strip()
 
 

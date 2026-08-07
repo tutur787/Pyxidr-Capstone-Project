@@ -39,6 +39,8 @@ class FabnSolveResult:
     RBC_val: float | None = None
     D_avg: float | None = None
     earn_per_cap: float | None = None
+    cvar_realized: float | None = None
+    swap_notional_total: float | None = None
     raw: dict[str, Any] | None = None
 
     @property
@@ -64,6 +66,8 @@ class FabnSolveResult:
             RBC_val=raw.get("RBC_val"),
             D_avg=raw.get("D_avg"),
             earn_per_cap=raw.get("earn_per_cap"),
+            cvar_realized=raw.get("cvar_realized"),
+            swap_notional_total=raw.get("swap_notional_total"),
             raw=raw,
         )
 
@@ -107,6 +111,7 @@ def solve_fabn_sap(
         eps_D=params.eps_D,
         w_max=params.w_max,
         n_min=params.n_min,
+        phi_cvar=params.phi_cvar,
         log_to_console=log_to_console,
         optimization_date=opt_date,
     )
@@ -172,6 +177,8 @@ def export_fabn_results(
         ("RBC ($)", solve.RBC_val),
         ("D_avg (yrs)", solve.D_avg),
         ("Earnings / req. capital", solve.earn_per_cap),
+        ("CVaR realized tail loss ($)", solve.cvar_realized),
+        ("Swap notional total ($)", solve.swap_notional_total),
     ]
     with open(summary_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
